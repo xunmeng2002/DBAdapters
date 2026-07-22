@@ -117,6 +117,7 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
     "find_dependency(unofficial-sqlite3 CONFIG)\n"
     "find_dependency(unofficial-mysql-connector-cpp CONFIG)\n"
     "find_dependency(unofficial-mariadb-connector-cpp CONFIG)\n"
+    "find_dependency(ZLIB)\n"
     "include(\"\${CMAKE_CURRENT_LIST_DIR}/${PROJECT_NAME}Targets.cmake\")\n"
     "set(${PROJECT_NAME}_FOUND TRUE)\n"
 )
