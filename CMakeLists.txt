@@ -79,4 +79,4 @@ target_compile_definitions(MariadbWrapper PRIVATE
   MARIADB_PLUGIN_DIR="${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/,>plugins/libmariadb"
 )
 
-#add_subdirectory(test)
+add_subdirectory(test)
