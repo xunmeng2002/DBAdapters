@@ -109,8 +109,24 @@ write_basic_package_version_file(
     VERSION ${PROJECT_VERSION}
     COMPATIBILITY SameMajorVersion
 )
+# 计算 duckdb config 在安装后相对于本 Config.cmake 的路径
+# duckdb 的 Config.cmake 期望自身目录下有 include/ 和 win64|linux/，
+# 所以必须指向 duckdb 原始位置而非复制过来
+file(RELATIVE_PATH DUCKDB_CONFIG_REL_DIR
+    "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
+    "${CMAKE_SOURCE_DIR}/../Libs/duckdb"
+)
+message(STATUS "DuckDB relative path for installed config: ${DUCKDB_CONFIG_REL_DIR}")
+
+# 生成 DBAdaptersConfig.cmake，包含传递依赖的 find_dependency 调用，
+# 确保消费方无需手动 find_package 第三方库
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
     "include(CMakeFindDependencyMacro)\n"
+    "find_dependency(unofficial-sqlite3 CONFIG)\n"
+    "find_dependency(unofficial-mysql-connector-cpp CONFIG)\n"
+    "find_dependency(unofficial-mariadb-connector-cpp CONFIG)\n"
+    "set(DUCKDB_DIR \"\${CMAKE_CURRENT_LIST_DIR}/${DUCKDB_CONFIG_REL_DIR}\")\n"
+    "find_dependency(duckdb PATHS \"\${DUCKDB_DIR}\" NO_DEFAULT_PATH)\n"
     "include(\"\${CMAKE_CURRENT_LIST_DIR}/${PROJECT_NAME}Targets.cmake\")\n"
     "set(${PROJECT_NAME}_FOUND TRUE)\n"
 )
