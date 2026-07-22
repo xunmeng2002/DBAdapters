@@ -110,8 +110,13 @@ write_basic_package_version_file(
     COMPATIBILITY SameMajorVersion
 )
 
+# 生成 DBAdaptersConfig.cmake
+# find_dependency 使 vcpkg 注册这些包，applocal 才能自动拷贝 DLL
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
     "include(CMakeFindDependencyMacro)\n"
+    "find_dependency(unofficial-sqlite3 CONFIG)\n"
+    "find_dependency(unofficial-mysql-connector-cpp CONFIG)\n"
+    "find_dependency(unofficial-mariadb-connector-cpp CONFIG)\n"
     "include(\"\${CMAKE_CURRENT_LIST_DIR}/${PROJECT_NAME}Targets.cmake\")\n"
     "set(${PROJECT_NAME}_FOUND TRUE)\n"
 )
