@@ -1,5 +1,4 @@
 #pragma once
-#include <Mdb/Mdb/MdbExport.h>
 #include <DBAdapters/DBInterface/Schema.h>
 #include <PersonalLib/Types.h>
 
