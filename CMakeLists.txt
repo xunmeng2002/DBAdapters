@@ -68,10 +68,10 @@ find_package(unofficial-mariadb-connector-cpp CONFIG REQUIRED)
 
 
 target_link_libraries(AsyncDBWriter PRIVATE PersonalLib::Core)
-target_link_libraries(DuckdbWrapper PUBLIC DBInterface duckdb)
-target_link_libraries(SqliteWrapper PUBLIC DBInterface unofficial::sqlite3::sqlite3)
-target_link_libraries(MysqlWrapper PUBLIC DBInterface unofficial::mysql-connector-cpp::connector)
-target_link_libraries(MariadbWrapper PUBLIC DBInterface unofficial::mariadb-connector-cpp::mariadbcpp)
+target_link_libraries(DuckdbWrapper PUBLIC DBInterface PRIVATE duckdb)
+target_link_libraries(SqliteWrapper PUBLIC DBInterface PRIVATE unofficial::sqlite3::sqlite3)
+target_link_libraries(MysqlWrapper PUBLIC DBInterface PRIVATE unofficial::mysql-connector-cpp::connector)
+target_link_libraries(MariadbWrapper PUBLIC DBInterface PRIVATE unofficial::mariadb-connector-cpp::mariadbcpp)
 
 # libmariadb 运行时动态加载认证插件（非 PE 依赖，无法通过 vcpkg applocal 自动部署）
 # 编译时注入插件路径，Connect() 内设环境变量 MARIADB_PLUGIN_DIR 告知 libmariadb
@@ -109,24 +109,9 @@ write_basic_package_version_file(
     VERSION ${PROJECT_VERSION}
     COMPATIBILITY SameMajorVersion
 )
-# 计算 duckdb config 在安装后相对于本 Config.cmake 的路径
-# duckdb 的 Config.cmake 期望自身目录下有 include/ 和 win64|linux/，
-# 所以必须指向 duckdb 原始位置而非复制过来
-file(RELATIVE_PATH DUCKDB_CONFIG_REL_DIR
-    "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
-    "${CMAKE_SOURCE_DIR}/../Libs/duckdb"
-)
-message(STATUS "DuckDB relative path for installed config: ${DUCKDB_CONFIG_REL_DIR}")
 
-# 生成 DBAdaptersConfig.cmake，包含传递依赖的 find_dependency 调用，
-# 确保消费方无需手动 find_package 第三方库
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
     "include(CMakeFindDependencyMacro)\n"
-    "find_dependency(unofficial-sqlite3 CONFIG)\n"
-    "find_dependency(unofficial-mysql-connector-cpp CONFIG)\n"
-    "find_dependency(unofficial-mariadb-connector-cpp CONFIG)\n"
-    "set(DUCKDB_DIR \"\${CMAKE_CURRENT_LIST_DIR}/${DUCKDB_CONFIG_REL_DIR}\")\n"
-    "find_dependency(duckdb PATHS \"\${DUCKDB_DIR}\" NO_DEFAULT_PATH)\n"
     "include(\"\${CMAKE_CURRENT_LIST_DIR}/${PROJECT_NAME}Targets.cmake\")\n"
     "set(${PROJECT_NAME}_FOUND TRUE)\n"
 )
