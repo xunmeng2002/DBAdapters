@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
-set(VcpkgPth "D:/Github/vcpkg")
-set(CMAKE_TOOLCHAIN_FILE "${VcpkgPth}/scripts/buildsystems/vcpkg.cmake")
+if(DEFINED ENV{VCPKG_ROOT})
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+elseif(WIN32)
+    set(CMAKE_TOOLCHAIN_FILE "D:/Github/vcpkg/scripts/buildsystems/vcpkg.cmake")
+endif()
 SET(PROJECT_NAME "DBAdapters")
 project(${PROJECT_NAME} VERSION 1.0.0 LANGUAGES CXX)
 include(GNUInstallDirs)
@@ -28,9 +31,12 @@ IF(CMAKE_SYSTEM_NAME MATCHES "Windows")
 ELSEIF(CMAKE_SYSTEM_NAME MATCHES "Linux")
 	add_definitions("-DLINUX")
     add_compile_options(
-        $<$<CONFIG:Debug>:-O0 -g -ggdb>
+        $<$<CONFIG:Debug>:-O0>
+        $<$<CONFIG:Debug>:-g>
+        $<$<CONFIG:Debug>:-ggdb>
         $<$<CONFIG:Release>:-O3>
-        $<$<CONFIG:RelWithDebInfo>:-O2 -g>
+        $<$<CONFIG:RelWithDebInfo>:-O2>
+        $<$<CONFIG:RelWithDebInfo>:-g>
         $<$<CONFIG:MinSizeRel>:-Os>)
     add_compile_definitions(
         $<$<CONFIG:Debug>:_DEBUG>

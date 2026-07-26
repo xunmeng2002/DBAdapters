@@ -13,7 +13,7 @@
       "variables": [
         {
           "name": "CMAKE_INSTALL_PREFIX",
-          "value": "${projectDir}/../Libs/DBAdapters",
+          "value": "${projectDir}/../Libs/DBAdapters/x64-windows",
           "type": "PATH"
         }
       ]
@@ -31,7 +31,47 @@
       "variables": [
         {
           "name": "CMAKE_INSTALL_PREFIX",
-          "value": "${projectDir}/../Libs/DBAdapters",
+          "value": "${projectDir}/../Libs/DBAdapters/x64-windows",
+          "type": "PATH"
+        }
+      ]
+    },
+    {
+      "name": "WSL-GCC-Debug",
+      "generator": "Ninja",
+      "configurationType": "Debug",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeExecutable": "cmake",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "linux_x64" ],
+      "wslPath": "${defaultWSLPath}",
+      "variables": [
+        {
+          "name": "CMAKE_INSTALL_PREFIX",
+          "value": "${projectDir}/../Libs/DBAdapters/x64-linux",
+          "type": "PATH"
+        }
+      ]
+    },
+    {
+      "name": "WSL-GCC-Release",
+      "generator": "Ninja",
+      "configurationType": "Release",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeExecutable": "cmake",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "linux_x64" ],
+      "wslPath": "${defaultWSLPath}",
+      "variables": [
+        {
+          "name": "CMAKE_INSTALL_PREFIX",
+          "value": "${projectDir}/../Libs/DBAdapters/x64-linux",
           "type": "PATH"
         }
       ]
