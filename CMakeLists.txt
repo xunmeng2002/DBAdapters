@@ -59,16 +59,21 @@ add_shared_module(MariadbWrapper		${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CU
 add_shared_module(DuckdbWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DBAdapters/DuckdbWrapper)
 add_shared_module(SqliteWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DBAdapters/SqliteWrapper)
 
-find_package(PersonalLib REQUIRED PATHS "../Libs/PersonalLib")
-find_package(duckdb REQUIRED PATHS "../Libs/duckdb")
+if(WIN32)
+    find_package(Spark REQUIRED PATHS "../Libs/Spark/x64-windows")
+    find_package(duckdb CONFIG REQUIRED PATHS "../Libs/duckdb/x64-windows")
+else()
+    find_package(Spark REQUIRED PATHS "../Libs/Spark/x64-linux")
+    find_package(duckdb CONFIG REQUIRED PATHS "../Libs/duckdb/x64-linux")
+endif()
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(unofficial-mysql-connector-cpp CONFIG REQUIRED)
 find_package(unofficial-mariadb-connector-cpp CONFIG REQUIRED)
 
 
 
-target_link_libraries(AsyncDBWriter PRIVATE PersonalLib::Core)
-target_link_libraries(DuckdbWrapper PUBLIC DBInterface PRIVATE duckdb)
+target_link_libraries(AsyncDBWriter PRIVATE Spark::Core)
+target_link_libraries(DuckdbWrapper PUBLIC DBInterface PRIVATE duckdb::duckdb)
 target_link_libraries(SqliteWrapper PUBLIC DBInterface PRIVATE unofficial::sqlite3::sqlite3)
 target_link_libraries(MysqlWrapper PUBLIC DBInterface PRIVATE unofficial::mysql-connector-cpp::connector)
 target_link_libraries(MariadbWrapper PUBLIC DBInterface PRIVATE unofficial::mariadb-connector-cpp::mariadbcpp)

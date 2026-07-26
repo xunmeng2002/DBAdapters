@@ -6,7 +6,7 @@
 #include <DBAdapters/DBInterface/TypedTable.h>
 #include <DBAdapters/DBInterface/SchemaRegistry.h>
 #include <DBAdapters/AsyncDBWriter/AsyncDBWriter.h>
-#include <PersonalLib/Core/Core.h>
+#include <Spark/Core/Core.h>
 #include <iostream>
 
 

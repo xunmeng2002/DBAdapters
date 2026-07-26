@@ -4,8 +4,8 @@
 #include <DBAdapters/DBInterface/DBSubscriber.h>
 #include <DBAdapters/DBInterface/DB.h>
 #include <DBAdapters/DBInterface/SchemaRegistry.h>
-#include <PersonalLib/TemplateLib/TemplateLib.h>
-#include <PersonalLib/Core/Core.h>
+#include <Spark/TemplateLib/TemplateLib.h>
+#include <Spark/Core/Core.h>
 #include <list>
 #include <atomic>
 #include <mutex>
