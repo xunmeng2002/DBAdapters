@@ -15,7 +15,7 @@ using namespace mdb;
 
 const char* sqliteDBName = "./Test.sqlitedb";
 const char* duckdbDBName = "./Test.duckdb";
-const char* mysqlHost = "mysqlx://sams:sams@localhost:33060/mdb";
+const char* mysqlHost = "mysqlx://sams:sams@localhost:33060/mdb";   
 const char* mariadbHost = "tcp://localhost:3306/mdb";
 const char* mariadbUser = "sams";
 const char* mariadbPassword = "sams";
@@ -201,10 +201,10 @@ int main(int argc, char* argv[])
 	Logger::GetInstance().SetLogLevel(LogLevel::Info, LogLevel::Info);
 	Logger::GetInstance().Start();
 
-    //TestSqlite();
-    //TestDuckdb();
-    //TestMysql();
-    TestMariadb();
+    TestSqlite();
+    TestDuckdb();
+    TestMysql();
+    //TestMariadb();
 
 	Logger::GetInstance().Stop();
 	Logger::GetInstance().Join();

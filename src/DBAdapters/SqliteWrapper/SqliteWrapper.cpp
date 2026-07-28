@@ -91,7 +91,11 @@ namespace
 			    const unsigned char* text = sqlite3_column_text(stmt, i);
 			    if (text)
 			    {
-				    std::memcpy(dest, text, field.arraySize);
+				    std::size_t copy_len = static_cast<std::size_t>(field.arraySize);
+				    int text_len = sqlite3_column_bytes(stmt, i);
+				    if (static_cast<std::size_t>(text_len) < copy_len)
+					    copy_len = static_cast<std::size_t>(text_len);
+				    std::memcpy(dest, text, copy_len);
 			    }
 			    break;
 		    }

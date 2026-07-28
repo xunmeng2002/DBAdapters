@@ -125,7 +125,7 @@ namespace
         {
             const auto& field = schema->fields[i];
             char* dest = data + field.offset;
-            int colIndex = i + 1;
+            int colIndex = i;
             switch (field.type)
             {
             case FieldType::Int:
@@ -140,7 +140,10 @@ namespace
             case FieldType::Char:
             {
                 std::string val = row[colIndex].get<std::string>();
-                std::memcpy(dest, val.c_str(), field.arraySize);
+                std::size_t copy_len = val.size();
+                if (copy_len > static_cast<std::size_t>(field.arraySize))
+                    copy_len = static_cast<std::size_t>(field.arraySize);
+                std::memcpy(dest, val.c_str(), copy_len);
                 break;
             }
             case FieldType::Bool:

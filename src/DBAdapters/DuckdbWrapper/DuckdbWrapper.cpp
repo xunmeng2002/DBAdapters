@@ -122,7 +122,10 @@ namespace
                 StringGuard str(duckdb_value_string(&result, i, row));
                 if (str.Data())
                 {
-                    std::memcpy(dest, str.Data(), field.arraySize);
+                    std::size_t copy_len = static_cast<std::size_t>(field.arraySize);
+                    if (str.Size() < copy_len)
+                        copy_len = str.Size();
+                    std::memcpy(dest, str.Data(), copy_len);
                 }
                 break;
             }
