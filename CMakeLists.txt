@@ -1,26 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
-
-# VS 2022 会篡改进程的 VCPKG_ROOT 为自带路径，
-# 从注册表恢复用户/系统环境变量的原始值。
-if(WIN32 AND "$ENV{VCPKG_ROOT}" MATCHES "Visual Studio")
-  execute_process(
-    COMMAND powershell -NoProfile -Command "
-      $v = [Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'User');
-      if (-not $v) { $v = [Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'Machine'); };
-      Write-Output $v
-    "
-    OUTPUT_VARIABLE _ORIG_VCPKG_ROOT
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
-  message(STATUS "PowerShell returned: '${_ORIG_VCPKG_ROOT}'")
-  if(_ORIG_VCPKG_ROOT)
-    set(ENV{VCPKG_ROOT} "${_ORIG_VCPKG_ROOT}")
-    message(STATUS "VCPKG_ROOT restored from system env: ${_ORIG_VCPKG_ROOT}")
-  else()
-    message(WARNING "VCPKG_ROOT hijacked by VS but could not read from registry!")
-  endif()
-endif()
-
+include(submodules/CMakeCommon/CMakeCommon.cmake)
+restore_vcpkg_root()
 set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
 message(STATUS "ENV{VCPKG_ROOT} = $ENV{VCPKG_ROOT}")
 message(STATUS "ENV{VCPKG_DOWNLOADS} = $ENV{VCPKG_DOWNLOADS}")
@@ -30,7 +10,6 @@ SET(PROJECT_NAME "DBAdapters")
 project(${PROJECT_NAME} VERSION 1.0.0 LANGUAGES CXX)
 include(GNUInstallDirs)
 include(GenerateExportHeader)
-include(submodules/CMakeCommon/CMakeCommon.cmake)
 
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
