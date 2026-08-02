@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 include(submodules/CMakeCommon/CMakeCommon.cmake)
 restore_vcpkg_root()
+reuse_git_proxy_for_vcpkg()
 set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
 message(STATUS "ENV{VCPKG_ROOT} = $ENV{VCPKG_ROOT}")
 message(STATUS "ENV{VCPKG_DOWNLOADS} = $ENV{VCPKG_DOWNLOADS}")
@@ -16,7 +17,7 @@ include(GenerateExportHeader)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_DEBUG_POSTFIX "d")
-set(CMAKE_VERBOSE_MAKEFILE ON)
+set(CMAKE_VERBOSE_MAKEFILE OFF)
 add_definitions(-DUNICODE -D_UNICODE)
 
 
