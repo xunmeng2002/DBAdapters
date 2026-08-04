@@ -20,7 +20,7 @@ set(CMAKE_VERBOSE_MAKEFILE OFF)
 add_definitions(-DUNICODE -D_UNICODE)
 
 
-IF(CMAKE_SYSTEM_NAME MATCHES "Windows")
+if(CMAKE_SYSTEM_NAME MATCHES "Windows")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc /bigobj /utf-8")
     add_definitions(-DWINDOWS -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING)
 	add_compile_options(
@@ -30,7 +30,7 @@ IF(CMAKE_SYSTEM_NAME MATCHES "Windows")
         $<$<CONFIG:RelWithDebInfo>:/O2>
         $<$<CONFIG:RelWithDebInfo>:/Zi>
         $<$<CONFIG:MinSizeRel>:/O1>)
-ELSEIF(CMAKE_SYSTEM_NAME MATCHES "Linux")
+elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
 	add_definitions("-DLINUX")
     add_compile_options(
         $<$<CONFIG:Debug>:-O0>
@@ -45,7 +45,7 @@ ELSEIF(CMAKE_SYSTEM_NAME MATCHES "Linux")
         $<$<CONFIG:Release>:NDEBUG>
         $<$<CONFIG:RelWithDebInfo>:NDEBUG>
         $<$<CONFIG:MinSizeRel>:NDEBUG>)
-ENDIF()
+endif()
 message("CMAKE_BUILD_TYPE:" ${CMAKE_BUILD_TYPE})
 message("CMAKE_SYSTEM_NAME:" ${CMAKE_SYSTEM_NAME})
 message("CMAKE_CL_64:" ${CMAKE_CL_64})
@@ -67,10 +67,10 @@ add_shared_module(MariadbWrapper		${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CU
 add_shared_module(DuckdbWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DBAdapters/DuckdbWrapper)
 add_shared_module(SqliteWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DBAdapters/SqliteWrapper)
 
-if(WIN32)
+if(CMAKE_SYSTEM_NAME MATCHES "Windows")
     find_package(Spark REQUIRED PATHS "../Libs/Spark/x64-windows")
     find_package(duckdb CONFIG REQUIRED PATHS "../Libs/duckdb/x64-windows")
-else()
+elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
     find_package(Spark REQUIRED PATHS "../Libs/Spark/x64-linux")
     find_package(duckdb CONFIG REQUIRED PATHS "../Libs/duckdb/x64-linux")
 endif()
@@ -91,6 +91,16 @@ target_link_libraries(MariadbWrapper PUBLIC DBInterface PRIVATE unofficial::mari
 target_compile_definitions(MariadbWrapper PRIVATE
   MARIADB_PLUGIN_DIR="${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/,>plugins/libmariadb"
 )
+
+# Linux: install() 会剥掉 build 时注入的 RPATH，安装版 libDuckdbWrapper.so 因此找不到
+# libduckdb.so（IMPORTED_LINK_DEPENDENT_LIBRARIES 不会把 duckdb 目录传给消费方）。
+# 方案：INSTALL_RPATH 用 $ORIGIN（相对自身目录），并把 libduckdb.so 一并装入安装包，
+# 使安装树自包含，可整体搬移到任意 Linux 机器。
+if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+    get_target_property(_duckdb_runtime_file duckdb::duckdb IMPORTED_LOCATION)
+    set_target_properties(DuckdbWrapper PROPERTIES INSTALL_RPATH "\$ORIGIN")
+    install(FILES "${_duckdb_runtime_file}" DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
 
 option(BUILD_TESTS "Build test projects" ON)
 if(BUILD_TESTS)
