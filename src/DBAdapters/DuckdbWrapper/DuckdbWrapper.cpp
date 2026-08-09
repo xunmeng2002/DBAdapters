@@ -160,9 +160,11 @@ namespace
         }
     }
 
-    // 向量化读取数值单元格；未知类型回退到逐值转换访问器。
-    double ReadCellAsDouble(duckdb_result* result, idx_t col, idx_t row, duckdb_type sourceType,
-                            uint8_t decimalWidth, uint8_t decimalScale, void* rawData)
+    // 从 chunk 向量按源类型取 double；DECIMAL 用向量自带的宽度/精度精确转换。
+    // 注意：duckdb_value_* 访问器在流式（duckdb_fetch_chunk）结果上不可用，
+    // 因此类型转换一律基于 chunk 向量原始数据，绝不回退到结果级访问器。
+    double ReadCellAsDouble(duckdb_type sourceType, void* rawData, idx_t row,
+                            uint8_t decimalWidth, uint8_t decimalScale)
     {
         switch (sourceType)
         {
@@ -183,15 +185,26 @@ namespace
             return static_cast<double>(static_cast<short*>(rawData)[row]);
         case DUCKDB_TYPE_TINYINT:
             return static_cast<double>(static_cast<signed char*>(rawData)[row]);
+        case DUCKDB_TYPE_UBIGINT:
+            return static_cast<double>(static_cast<unsigned long long*>(rawData)[row]);
+        case DUCKDB_TYPE_UINTEGER:
+            return static_cast<double>(static_cast<unsigned int*>(rawData)[row]);
+        case DUCKDB_TYPE_HUGEINT:
+            return duckdb_hugeint_to_double(static_cast<duckdb_hugeint*>(rawData)[row]);
+        case DUCKDB_TYPE_TIMESTAMP:
+            return static_cast<double>(static_cast<duckdb_timestamp*>(rawData)[row].micros);
+        case DUCKDB_TYPE_DATE:
+            return static_cast<double>(static_cast<duckdb_date*>(rawData)[row].days);
         case DUCKDB_TYPE_BOOLEAN:
             return static_cast<bool*>(rawData)[row] ? 1.0 : 0.0;
         default:
-            return duckdb_value_double(result, col, row);
+            return 0.0;
         }
     }
 
-    long long ReadCellAsInt64(duckdb_result* result, idx_t col, idx_t row, duckdb_type sourceType,
-                              void* rawData)
+    // 从 chunk 向量按源类型取 int64；DOUBLE/FLOAT/DECIMAL 截断为整数。
+    long long ReadCellAsInt64(duckdb_type sourceType, void* rawData, idx_t row,
+                              uint8_t decimalWidth, uint8_t decimalScale)
     {
         switch (sourceType)
         {
@@ -203,15 +216,39 @@ namespace
             return static_cast<short*>(rawData)[row];
         case DUCKDB_TYPE_TINYINT:
             return static_cast<signed char*>(rawData)[row];
+        case DUCKDB_TYPE_UBIGINT:
+            return static_cast<long long>(static_cast<unsigned long long*>(rawData)[row]);
+        case DUCKDB_TYPE_UINTEGER:
+            return static_cast<unsigned int*>(rawData)[row];
+        case DUCKDB_TYPE_USMALLINT:
+            return static_cast<unsigned short*>(rawData)[row];
+        case DUCKDB_TYPE_UTINYINT:
+            return static_cast<unsigned char*>(rawData)[row];
+        case DUCKDB_TYPE_DOUBLE:
+            return static_cast<long long>(static_cast<double*>(rawData)[row]);
+        case DUCKDB_TYPE_FLOAT:
+            return static_cast<long long>(static_cast<float*>(rawData)[row]);
+        case DUCKDB_TYPE_DECIMAL:
+        {
+            duckdb_hugeint value = static_cast<duckdb_hugeint*>(rawData)[row];
+            return static_cast<long long>(
+                duckdb_decimal_to_double(duckdb_decimal{ decimalWidth, decimalScale, value }));
+        }
+        case DUCKDB_TYPE_HUGEINT:
+            return static_cast<long long>(
+                duckdb_hugeint_to_double(static_cast<duckdb_hugeint*>(rawData)[row]));
+        case DUCKDB_TYPE_TIMESTAMP:
+            return static_cast<duckdb_timestamp*>(rawData)[row].micros;
         case DUCKDB_TYPE_BOOLEAN:
             return static_cast<bool*>(rawData)[row] ? 1 : 0;
         default:
-            return duckdb_value_int64(result, col, row);
+            return 0;
         }
     }
 
-    int ReadCellAsInt32(duckdb_result* result, idx_t col, idx_t row, duckdb_type sourceType,
-                        void* rawData)
+    // 从 chunk 向量按源类型取 int32；DOUBLE/FLOAT/DECIMAL 截断为整数。
+    int ReadCellAsInt32(duckdb_type sourceType, void* rawData, idx_t row,
+                        uint8_t decimalWidth, uint8_t decimalScale)
     {
         switch (sourceType)
         {
@@ -221,17 +258,28 @@ namespace
             return static_cast<short*>(rawData)[row];
         case DUCKDB_TYPE_TINYINT:
             return static_cast<signed char*>(rawData)[row];
-        case DUCKDB_TYPE_BOOLEAN:
-            return static_cast<bool*>(rawData)[row] ? 1 : 0;
         case DUCKDB_TYPE_BIGINT:
             return static_cast<int>(static_cast<long long*>(rawData)[row]);
+        case DUCKDB_TYPE_DOUBLE:
+            return static_cast<int>(static_cast<double*>(rawData)[row]);
+        case DUCKDB_TYPE_FLOAT:
+            return static_cast<int>(static_cast<float*>(rawData)[row]);
+        case DUCKDB_TYPE_DECIMAL:
+        {
+            duckdb_hugeint value = static_cast<duckdb_hugeint*>(rawData)[row];
+            return static_cast<int>(
+                duckdb_decimal_to_double(duckdb_decimal{ decimalWidth, decimalScale, value }));
+        }
+        case DUCKDB_TYPE_BOOLEAN:
+            return static_cast<bool*>(rawData)[row] ? 1 : 0;
         default:
-            return duckdb_value_int32(result, col, row);
+            return 0;
         }
     }
 
-    bool ReadCellAsBool(duckdb_result* result, idx_t col, idx_t row, duckdb_type sourceType,
-                        void* rawData)
+    // 从 chunk 向量按源类型取 bool；数值类型按非零判定。
+    bool ReadCellAsBool(duckdb_type sourceType, void* rawData, idx_t row,
+                        uint8_t decimalWidth, uint8_t decimalScale)
     {
         switch (sourceType)
         {
@@ -245,13 +293,66 @@ namespace
             return static_cast<int*>(rawData)[row] != 0;
         case DUCKDB_TYPE_BIGINT:
             return static_cast<long long*>(rawData)[row] != 0;
+        case DUCKDB_TYPE_DOUBLE:
+            return static_cast<double*>(rawData)[row] != 0.0;
+        case DUCKDB_TYPE_DECIMAL:
+        {
+            duckdb_hugeint value = static_cast<duckdb_hugeint*>(rawData)[row];
+            return duckdb_decimal_to_double(duckdb_decimal{ decimalWidth, decimalScale, value }) != 0.0;
+        }
         default:
-            return duckdb_value_boolean(result, col, row);
+            return false;
         }
     }
 
-    void ReadCellAsChar(char* dest, std::size_t capacity, idx_t row, duckdb_type sourceType,
-                        void* rawData, duckdb_result* result, idx_t col)
+    // 把非 VARCHAR 源的 chunk 向量单元格渲染为字符串；整数/时间戳直接 to_string，
+    // DOUBLE/FLOAT 用 std::to_string（6 位小数），DECIMAL 先转 double。
+    std::string RenderCellAsString(duckdb_type sourceType, void* rawData, idx_t row,
+                                   uint8_t decimalWidth, uint8_t decimalScale)
+    {
+        switch (sourceType)
+        {
+        case DUCKDB_TYPE_BIGINT:
+            return std::to_string(static_cast<long long*>(rawData)[row]);
+        case DUCKDB_TYPE_INTEGER:
+            return std::to_string(static_cast<int*>(rawData)[row]);
+        case DUCKDB_TYPE_SMALLINT:
+            return std::to_string(static_cast<short*>(rawData)[row]);
+        case DUCKDB_TYPE_TINYINT:
+            return std::to_string(static_cast<signed char*>(rawData)[row]);
+        case DUCKDB_TYPE_UBIGINT:
+            return std::to_string(static_cast<unsigned long long*>(rawData)[row]);
+        case DUCKDB_TYPE_UINTEGER:
+            return std::to_string(static_cast<unsigned int*>(rawData)[row]);
+        case DUCKDB_TYPE_USMALLINT:
+            return std::to_string(static_cast<unsigned short*>(rawData)[row]);
+        case DUCKDB_TYPE_UTINYINT:
+            return std::to_string(static_cast<unsigned char*>(rawData)[row]);
+        case DUCKDB_TYPE_DOUBLE:
+            return std::to_string(static_cast<double*>(rawData)[row]);
+        case DUCKDB_TYPE_FLOAT:
+            return std::to_string(static_cast<float*>(rawData)[row]);
+        case DUCKDB_TYPE_DECIMAL:
+        {
+            duckdb_hugeint value = static_cast<duckdb_hugeint*>(rawData)[row];
+            return std::to_string(
+                duckdb_decimal_to_double(duckdb_decimal{ decimalWidth, decimalScale, value }));
+        }
+        case DUCKDB_TYPE_BOOLEAN:
+            return static_cast<bool*>(rawData)[row] ? "true" : "false";
+        case DUCKDB_TYPE_TIMESTAMP:
+            return std::to_string(static_cast<duckdb_timestamp*>(rawData)[row].micros);
+        case DUCKDB_TYPE_DATE:
+            return std::to_string(static_cast<duckdb_date*>(rawData)[row].days);
+        case DUCKDB_TYPE_TIME:
+            return std::to_string(static_cast<duckdb_time*>(rawData)[row].micros);
+        default:
+            return std::string();
+        }
+    }
+
+    void ReadCellAsChar(char* dest, std::size_t capacity, duckdb_type sourceType,
+                        void* rawData, idx_t row, uint8_t decimalWidth, uint8_t decimalScale)
     {
         if (sourceType == DUCKDB_TYPE_VARCHAR)
         {
@@ -265,22 +366,18 @@ namespace
             dest[length] = '\0';
             return;
         }
-        StringGuard guard(duckdb_value_string(result, col, row));
-        if (guard.Data())
+        std::string value = RenderCellAsString(sourceType, rawData, row, decimalWidth, decimalScale);
+        std::size_t length = value.size();
+        if (length >= capacity)
         {
-            std::size_t length = guard.Size();
-            if (length >= capacity)
-            {
-                length = capacity - 1;
-            }
-            std::memcpy(dest, guard.Data(), length);
-            dest[length] = '\0';
+            length = capacity - 1;
         }
+        std::memcpy(dest, value.data(), length);
+        dest[length] = '\0';
     }
 
     // 按 schema 列主序绑定一个 chunk 的所有行到已分配的记录。
-    void BindChunkToRecords(duckdb_data_chunk chunk, const TableSchema* schema,
-                            void** records, duckdb_result* result)
+    void BindChunkToRecords(duckdb_data_chunk chunk, const TableSchema* schema, void** records)
     {
         idx_t rowCount = duckdb_data_chunk_get_size(chunk);
         for (int fieldIndex = 0; fieldIndex < schema->fieldCount; ++fieldIndex)
@@ -312,23 +409,24 @@ namespace
                 switch (field.type)
                 {
                 case FieldType::Double:
-                    *reinterpret_cast<double*>(dest) = ReadCellAsDouble(
-                        result, fieldIndex, row, sourceType, decimalWidth, decimalScale, rawData);
+                    *reinterpret_cast<double*>(dest) =
+                        ReadCellAsDouble(sourceType, rawData, row, decimalWidth, decimalScale);
                     break;
                 case FieldType::Int64:
                     *reinterpret_cast<long long*>(dest) =
-                        ReadCellAsInt64(result, fieldIndex, row, sourceType, rawData);
+                        ReadCellAsInt64(sourceType, rawData, row, decimalWidth, decimalScale);
                     break;
                 case FieldType::Int:
                     *reinterpret_cast<int*>(dest) =
-                        ReadCellAsInt32(result, fieldIndex, row, sourceType, rawData);
+                        ReadCellAsInt32(sourceType, rawData, row, decimalWidth, decimalScale);
                     break;
                 case FieldType::Bool:
                     *reinterpret_cast<bool*>(dest) =
-                        ReadCellAsBool(result, fieldIndex, row, sourceType, rawData);
+                        ReadCellAsBool(sourceType, rawData, row, decimalWidth, decimalScale);
                     break;
                 case FieldType::Char:
-                    ReadCellAsChar(dest, field.arraySize, row, sourceType, rawData, result, fieldIndex);
+                    ReadCellAsChar(dest, field.arraySize, sourceType, rawData, row,
+                                   decimalWidth, decimalScale);
                     break;
                 }
             }
@@ -641,7 +739,7 @@ std::string DuckdbWrapper::SelectWithSqlVectorized(const char* sql, const TableS
             {
                 rowRecords[row] = factory.Allocate();
             }
-            BindChunkToRecords(chunk, schema, rowRecords.data(), &result);
+            BindChunkToRecords(chunk, schema, rowRecords.data());
             for (idx_t row = 0; row < chunkRowCount; ++row)
             {
                 factory.PushBack(recordsList, rowRecords[row]);

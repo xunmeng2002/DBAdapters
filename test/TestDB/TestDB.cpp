@@ -7,6 +7,7 @@
 #include <DBAdapters/DBInterface/SchemaRegistry.h>
 #include <DBAdapters/AsyncDBWriter/AsyncDBWriter.h>
 #include <Spark/Core/Core.h>
+#include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <limits>
@@ -328,6 +329,118 @@ static void TestDuckdbVectorized()
     delete duckdb;
 }
 
+// ============ 多 chunk 回退路径测试：BIGINT→Char、DOUBLE→Int64 ============
+
+namespace mdb
+{
+    class TestMultiChunkRow
+    {
+    public:
+        char TradingDay[16];    // BIGINT 源 -> Char 字段（走 duckdb_value_string 回退）
+        long long Volume;       // DOUBLE 源 -> Int64 字段（走 duckdb_value_int64 回退）
+        double LastPrice;       // DECIMAL 源 -> Double 字段（向量快路径）
+
+        static TestMultiChunkRow* Allocate() { return new TestMultiChunkRow(); }
+        void Deallocate() { delete this; }
+        static const TableSchema& GetSchema();
+    };
+
+    static const FieldDescriptor TestMultiChunkRowFields[] = {
+        {"TradingDay", FieldType::Char,   offsetof(TestMultiChunkRow, TradingDay), sizeof(TestMultiChunkRow::TradingDay)},
+        {"Volume",     FieldType::Int64,  offsetof(TestMultiChunkRow, Volume),     0},
+        {"LastPrice",  FieldType::Double, offsetof(TestMultiChunkRow, LastPrice),  0},
+    };
+    static void DeallocateTestMultiChunkRow(void* record)
+    {
+        static_cast<TestMultiChunkRow*>(record)->Deallocate();
+    }
+    const TableSchema& TestMultiChunkRow::GetSchema()
+    {
+        static const TableSchema schema = {
+            "t_test_multichunk", TestMultiChunkRowFields, 3, nullptr, 0,
+            DeallocateTestMultiChunkRow, nullptr, 0,
+        };
+        return schema;
+    }
+}
+
+static void TestDuckdbVectorizedMultiChunk()
+{
+    using namespace mdb;
+    DuckdbWrapper* duckdb = new DuckdbWrapper(":memory:");
+    WriteLog(LogLevel::Info, "TestDB with DuckdbVectorizedMultiChunk");
+
+    duckdb->Exec("CREATE TABLE t_test_multichunk (TradingDay BIGINT, Volume DOUBLE, LastPrice DECIMAL(24,8));");
+    // 6000 行 -> 3 个 chunk（每 chunk 2048 行），跨 chunk 边界验证回退路径的行索引
+    {
+        std::string sql = "INSERT INTO t_test_multichunk SELECT "
+            "20000000 + i AS TradingDay, i AS Volume, Cast(100.5 + i AS DECIMAL(24,8)) AS LastPrice "
+            "FROM range(0, 6000) t(i);";
+        duckdb->Exec(sql.c_str());
+    }
+
+    RecordFactory factory = {
+        []() -> void* { return TestMultiChunkRow::Allocate(); },
+        [](void* records, void* record) {
+            static_cast<std::vector<TestMultiChunkRow*>*>(records)->push_back(
+                static_cast<TestMultiChunkRow*>(record));
+        },
+    };
+
+    std::vector<TestMultiChunkRow*> records;
+    std::string error = duckdb->SelectWithSqlVectorized(
+        "SELECT TradingDay, Volume, LastPrice FROM t_test_multichunk ORDER BY Volume;",
+        &TestMultiChunkRow::GetSchema(), &records, factory);
+
+    if (!error.empty())
+    {
+        WriteLog(LogLevel::Error, "MultiChunk Error: %s", error.c_str());
+    }
+    bool pass = records.size() == 6000;
+    int failedRow = -1;
+    if (pass)
+    {
+        for (int i = 0; i < 6000; ++i)
+        {
+            char expectedDay[16];
+            snprintf(expectedDay, sizeof(expectedDay), "%d", 20000000 + i);
+            if (strcmp(records[i]->TradingDay, expectedDay) != 0
+                || records[i]->Volume != i
+                || records[i]->LastPrice != 100.5 + i)
+            {
+                pass = false;
+                failedRow = i;
+                break;
+            }
+        }
+    }
+    if (pass)
+    {
+        WriteLog(LogLevel::Info, "TestDuckdbVectorizedMultiChunk PASS");
+    }
+    else
+    {
+        WriteLog(LogLevel::Error, "TestDuckdbVectorizedMultiChunk FAILED, failedRow=%d", failedRow);
+        for (int k = failedRow - 1; k <= failedRow + 1; ++k)
+        {
+            if (k >= 0 && k < (int)records.size())
+            {
+                char expectedDay[16];
+                snprintf(expectedDay, sizeof(expectedDay), "%d", 20000000 + k);
+                WriteLog(LogLevel::Error,
+                    "  idx=%d expected day=%s vol=%d last=%.1f | got day=%s vol=%lld last=%f",
+                    k, expectedDay, k, 100.5 + k,
+                    records[k]->TradingDay, records[k]->Volume, records[k]->LastPrice);
+            }
+        }
+    }
+    for (auto record : records)
+    {
+        record->Deallocate();
+    }
+    delete duckdb;
+}
+
 int main(int argc, char* argv[])
 {
 	Logger::GetInstance().Init(argv[0]);
@@ -337,6 +450,7 @@ int main(int argc, char* argv[])
     TestSqlite();
     TestDuckdb();
     TestDuckdbVectorized();
+    TestDuckdbVectorizedMultiChunk();
     //TestMysql();
     //TestMariadb();
 
