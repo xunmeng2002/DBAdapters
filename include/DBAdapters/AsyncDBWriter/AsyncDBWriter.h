@@ -12,7 +12,7 @@
 #include <condition_variable>
 
 
-class ASYNCDBWRITER_EXPORTS AsyncDBWriter : public ThreadBase, public MdbSubscriber
+class ASYNCDBWRITER_EXPORTS AsyncDBWriter : public spark::core::ThreadBase, public MdbSubscriber
 {
 public:
 	AsyncDBWriter(DB* db, SchemaRegistry* schemaRegistry);

@@ -2,6 +2,7 @@
 #include <Spark/TemplateLib/TemplateLib.h>
 #include <cstring>
 
+using namespace spark;
 
 DBOperate* DBOperate::Allocate()
 {

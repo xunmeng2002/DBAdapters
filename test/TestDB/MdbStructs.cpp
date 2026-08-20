@@ -3,6 +3,7 @@
 #include <string>
 #include <cstring>
 
+using namespace spark;
 namespace mdb
 {
 	thread_local char t_MdbDataStringBuffer[10240];

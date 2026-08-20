@@ -5,7 +5,7 @@
 #include <vector>
 
 using namespace std;
-
+using namespace spark::core;
 
 AsyncDBWriter::AsyncDBWriter(DB* db, SchemaRegistry* schemaRegistry)
 	:ThreadBase("AsyncDBWriter"), m_DB(db), m_SchemaRegistry(schemaRegistry), m_DBSubscriber(nullptr)
