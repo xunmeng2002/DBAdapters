@@ -1,6 +1,8 @@
 #pragma once
 #include <Spark/Types.h>
 
+namespace dbadapters
+{
 class DBOperate
 {
 public:
@@ -14,3 +16,4 @@ public:
 	unsigned int IndexID;
 	void* Record;
 };
+}

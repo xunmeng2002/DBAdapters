@@ -11,7 +11,8 @@
 #include <mutex>
 #include <condition_variable>
 
-
+namespace dbadapters
+{
 class ASYNCDBWRITER_EXPORTS AsyncDBWriter : public spark::core::ThreadBase, public MdbSubscriber
 {
 public:
@@ -60,3 +61,4 @@ private:
 	std::mutex m_Mutex;
 	std::condition_variable m_ConditionVariable;
 };
+}

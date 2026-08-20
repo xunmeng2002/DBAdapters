@@ -4,6 +4,8 @@
 #include <vector>
 
 
+namespace dbadapters
+{
 class MdbSubscriber
 {
 public:
@@ -24,3 +26,4 @@ public:
 public:
 	std::atomic<bool> m_Connected;
 };
+}

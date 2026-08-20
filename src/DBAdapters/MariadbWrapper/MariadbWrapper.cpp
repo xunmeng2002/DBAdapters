@@ -9,7 +9,7 @@
 #include <vector>
 
 
-namespace
+namespace dbadapters
 {
 
     void BindField(sql::PreparedStatement* pstmt, int paramIndex, const FieldDescriptor& field, const void* record)
@@ -182,9 +182,6 @@ namespace
             if (pstmt) { pstmt->close(); delete pstmt; }
         }
     };
-
-} // anonymous namespace
-
 
 struct MariadbWrapper::Impl
 {
@@ -362,4 +359,5 @@ void MariadbWrapper::SelectWithSql(const char* sql, const TableSchema* schema,
         ReadRow(result.get(), schema, record);
         factory.PushBack(recordsList, record);
     }
+}
 }

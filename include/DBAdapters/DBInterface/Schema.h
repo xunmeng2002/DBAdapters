@@ -1,6 +1,8 @@
 #pragma once
 #include <cstddef>
 
+namespace dbadapters
+{
 enum class FieldType : unsigned char
 {
     Int,
@@ -42,3 +44,4 @@ struct TableSchema
     const IndexDefinition*  secondaryIndices;
     int                     secondaryIndexCount;
 };
+}

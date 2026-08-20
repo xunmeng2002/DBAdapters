@@ -5,7 +5,7 @@
 #include <vector>
 
 
-namespace
+namespace dbadapters
 {
 
     mysqlx::Value FieldToValue(const FieldDescriptor& field, const void* record)
@@ -153,9 +153,6 @@ namespace
         }
     }
 
-} // anonymous namespace
-
-
 struct MysqlWrapper::Impl
 {
     explicit Impl(mysqlx::Session&& session)
@@ -294,4 +291,5 @@ void MysqlWrapper::SelectWithSql(const char* sql, const TableSchema* schema,
         ReadRow(row, schema, record);
         factory.PushBack(recordsList, record);
     }
+}
 }

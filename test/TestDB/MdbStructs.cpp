@@ -4,6 +4,7 @@
 #include <cstring>
 
 using namespace spark;
+using namespace dbadapters;
 namespace mdb
 {
 	thread_local char t_MdbDataStringBuffer[10240];

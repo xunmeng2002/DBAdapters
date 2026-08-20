@@ -3,6 +3,8 @@
 #include <vector>
 
 
+namespace dbadapters
+{
 template<typename T>
 class TypedTable
 {
@@ -59,3 +61,4 @@ private:
 
     DB* db_;
 };
+}

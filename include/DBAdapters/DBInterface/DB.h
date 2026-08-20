@@ -5,6 +5,8 @@
 #include <vector>
 
 
+namespace dbadapters
+{
 class DB
 {
 public:
@@ -33,3 +35,4 @@ public:
     virtual void SelectWithSql(const char* sql, const TableSchema* schema,
                                void* recordsList, const RecordFactory& factory) = 0;
 };
+}

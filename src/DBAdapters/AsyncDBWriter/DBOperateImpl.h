@@ -4,6 +4,8 @@
 #include <vector>
 
 
+namespace dbadapters
+{
 class DBOperateImpl : public DBOperate
 {
 public:
@@ -18,3 +20,4 @@ private:
     std::vector<const void*> batch_data_;
     SchemaRegistry* schema_registry_ = nullptr;
 };
+}

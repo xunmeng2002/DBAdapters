@@ -4,6 +4,8 @@
 #include <string>
 
 
+namespace dbadapters
+{
 class DUCKDBWRAPPER_EXPORTS DuckdbWrapper : public DB
 {
 public:
@@ -44,3 +46,4 @@ private:
     struct Impl;
     Impl* m_Impl;
 };
+}

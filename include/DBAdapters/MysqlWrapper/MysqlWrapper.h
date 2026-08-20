@@ -4,6 +4,8 @@
 #include <string>
 
 
+namespace dbadapters
+{
 class MYSQLWRAPPER_EXPORTS MysqlWrapper : public DB
 {
 public:
@@ -35,3 +37,4 @@ private:
     Impl* m_Impl;
     std::string m_Host;
 };
+}

@@ -4,6 +4,8 @@
 #include <string>
 
 
+namespace dbadapters
+{
 class SQLITEWRAPPER_EXPORTS SqliteWrapper : public DB
 {
 public:
@@ -34,3 +36,4 @@ private:
 	struct Impl;
 	Impl* m_Impl;
 };
+}

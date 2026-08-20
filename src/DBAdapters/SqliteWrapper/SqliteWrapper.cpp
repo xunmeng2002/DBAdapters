@@ -5,7 +5,7 @@
 #include <cstdio>
 
 
-namespace
+namespace dbadapters
 {
     class StatementGuard
     {
@@ -105,8 +105,6 @@ namespace
 		    }
 	    }
     }
-}
-
 
 struct SqliteWrapper::Impl
 {
@@ -336,4 +334,5 @@ void SqliteWrapper::SelectWithSql(const char* sql, const TableSchema* schema, vo
 		ReadRow(stmt.Get(), schema, record);
 		factory.PushBack(recordsList, record);
 	}
+}
 }

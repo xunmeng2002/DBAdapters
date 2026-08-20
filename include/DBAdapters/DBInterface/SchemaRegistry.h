@@ -2,6 +2,8 @@
 #include <DBAdapters/DBInterface/Schema.h>
 
 
+namespace dbadapters
+{
 class SchemaRegistry
 {
 public:
@@ -11,3 +13,4 @@ public:
     virtual const TableSchema* const* GetAllSchemas() const = 0;
     virtual int GetTableCount() const = 0;
 };
+}

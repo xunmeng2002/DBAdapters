@@ -6,7 +6,7 @@
 #include <vector>
 
 
-namespace
+namespace dbadapters
 {
 
     class PreparedStatement
@@ -519,9 +519,6 @@ namespace
         return sql.str();
     }
 
-} // anonymous namespace
-
-
 struct DuckdbWrapper::Impl
 {
     duckdb_database database = nullptr;
@@ -749,4 +746,5 @@ std::string DuckdbWrapper::SelectWithSqlVectorized(const char* sql, const TableS
     }
     duckdb_destroy_result(&result);
     return std::string();
+}
 }

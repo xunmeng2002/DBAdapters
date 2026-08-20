@@ -4,6 +4,8 @@
 
 using namespace spark;
 
+namespace dbadapters
+{
 DBOperate* DBOperate::Allocate()
 {
 	return ObjectPool<DBOperateImpl>::GetInstance().Allocate();
@@ -28,4 +30,5 @@ void DBOperateImpl::DeallocateRecord()
 		}
 	}
 	Record = nullptr;
+}
 }

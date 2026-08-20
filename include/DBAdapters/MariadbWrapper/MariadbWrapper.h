@@ -5,6 +5,8 @@
 #include <memory>
 
 
+namespace dbadapters
+{
 class MARIADBWRAPPER_EXPORTS MariadbWrapper : public DB
 {
 public:
@@ -38,3 +40,4 @@ private:
     std::string m_User;
     std::string m_Passwd;
 };
+}
