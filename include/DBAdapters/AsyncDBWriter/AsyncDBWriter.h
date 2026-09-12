@@ -3,6 +3,7 @@
 #include <DBAdapters/DBInterface/MdbSubscriber.h>
 #include <DBAdapters/DBInterface/DBSubscriber.h>
 #include <DBAdapters/DBInterface/DB.h>
+#include <DBAdapters/DBInterface/FailureLogThrottle.h>
 #include <DBAdapters/DBInterface/SchemaRegistry.h>
 #include <Spark/TemplateLib/TemplateLib.h>
 #include <Spark/Core/Core.h>
@@ -34,6 +35,7 @@ public:
 
 protected:
 	virtual void Run() override;
+	virtual void ThreadExit() override;
 	void CheckConnect();
 	void CheckDBOperate();
 	void HandleDBOperate();
@@ -42,6 +44,7 @@ protected:
 private:
 	DBOperate* AllocateDBOperate();
 	void AddDBOperate(DBOperate* dbOperate);
+	int PendingOperateCount();
 
 	void CreateTables(DBOperate* dbOperate);
 	void DropTables(DBOperate* dbOperate);
@@ -54,11 +57,15 @@ private:
 	void TruncateTable(DBOperate* dbOperate);
 
 private:
+	// 连接失败按固定重试次数节流上报：每轮 Run 都会重试一次连接，不节流会按 m_TimeOut 频率刷屏
+	static constexpr int kConnectFailureReportInterval = 100;
+
 	DB* m_DB;
 	SchemaRegistry* m_SchemaRegistry;
 	DBSubscriber* m_DBSubscriber;
 	std::list<DBOperate*> m_DBOperates;
 	std::mutex m_Mutex;
 	std::condition_variable m_ConditionVariable;
+	FailureLogThrottle m_ConnectFailureLogThrottle{ kConnectFailureReportInterval };
 };
 }

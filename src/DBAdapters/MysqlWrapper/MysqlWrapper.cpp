@@ -1,5 +1,9 @@
 #include <DBAdapters/MysqlWrapper/MysqlWrapper.h>
+
+#include <Spark/Core/Logger/Logger.h>
+
 #include <mysqlx/xdevapi.h>
+
 #include <cstring>
 #include <sstream>
 #include <vector>
@@ -7,6 +11,7 @@
 
 namespace dbadapters
 {
+    using spark::core::LogLevel;
 
     mysqlx::Value FieldToValue(const FieldDescriptor& field, const void* record)
     {
@@ -166,7 +171,16 @@ struct MysqlWrapper::Impl
 MysqlWrapper::MysqlWrapper(const std::string& host)
     : m_Impl(nullptr), m_Host(host)
 {
-    m_Impl = new Impl(mysqlx::Session(host));
+    // Session 构造即建连，失败抛异常；记录后继续抛出，保持调用方原有的失败感知（本 wrapper 的 Connect 不建连）
+    try
+    {
+        m_Impl = new Impl(mysqlx::Session(host));
+    }
+    catch (const std::exception& e)
+    {
+        WriteLog(LogLevel::Error, "MysqlWrapper: Connect failed. Host:%s, Message:%s", host.c_str(), e.what());
+        throw;
+    }
 }
 MysqlWrapper::~MysqlWrapper()
 {

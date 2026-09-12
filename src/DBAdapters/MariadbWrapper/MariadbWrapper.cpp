@@ -1,5 +1,7 @@
 #include <DBAdapters/MariadbWrapper/MariadbWrapper.h>
 
+#include <Spark/Core/Logger/Logger.h>
+
 #include <mariadb/conncpp.hpp>
 
 #include <cstring>
@@ -11,6 +13,7 @@
 
 namespace dbadapters
 {
+    using spark::core::LogLevel;
 
     void BindField(sql::PreparedStatement* pstmt, int paramIndex, const FieldDescriptor& field, const void* record)
     {
@@ -203,8 +206,18 @@ struct MariadbWrapper::Impl
 
 
 MariadbWrapper::MariadbWrapper(const std::string& host, const std::string& user, const std::string& passwd)
-    : m_Host(host), m_User(user), m_Passwd(passwd), m_Impl(std::make_unique<Impl>())
+    : m_Host(host), m_User(user), m_Passwd(passwd), m_Impl(nullptr)
 {
+    // 驱动装载失败（客户端动态库缺失）抛异常；记录后继续抛出，保持调用方原有的失败感知
+    try
+    {
+        m_Impl = std::make_unique<Impl>();
+    }
+    catch (const std::exception& e)
+    {
+        WriteLog(LogLevel::Error, "MariadbWrapper: Load driver failed. Message:%s", e.what());
+        throw;
+    }
 }
 
 MariadbWrapper::~MariadbWrapper()
@@ -217,8 +230,18 @@ bool MariadbWrapper::Connect()
 #ifdef _WIN32
     _putenv_s("MARIADB_PLUGIN_DIR", MARIADB_PLUGIN_DIR);
 #endif
-    m_Impl->m_DBConnection.reset(
-        m_Impl->m_Driver->connect(m_Host, m_User, m_Passwd));
+    // connect 失败抛异常而非返回空；若放任其穿出 AsyncDBWriter::Run()，会穿过 ThreadBase::ThreadFunc（无 catch）
+    // 直达 std::terminate，故在此转为返回 false，交由写库线程按连接失败重试并上报
+    try
+    {
+        m_Impl->m_DBConnection.reset(
+            m_Impl->m_Driver->connect(m_Host, m_User, m_Passwd));
+    }
+    catch (const std::exception& e)
+    {
+        WriteLog(LogLevel::Error, "MariadbWrapper: Connect failed. Host:%s, Message:%s", m_Host.c_str(), e.what());
+        return false;
+    }
     return m_Impl->m_DBConnection != nullptr;
 }
 

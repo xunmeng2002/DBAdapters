@@ -1,5 +1,11 @@
 #include <DBAdapters/DuckdbWrapper/DuckdbWrapper.h>
+
+#include <DBAdapters/DBInterface/FailureLogThrottle.h>
+
+#include <Spark/Core/Logger/Logger.h>
+
 #include <duckdb.h>
+
 #include <cstring>
 #include <limits>
 #include <sstream>
@@ -8,6 +14,7 @@
 
 namespace dbadapters
 {
+    using spark::core::LogLevel;
 
     class PreparedStatement
     {
@@ -32,6 +39,7 @@ namespace dbadapters
 
         bool IsValid() const { return valid_; }
         duckdb_prepared_statement Get() const { return stmt_; }
+        const char* GetPrepareError() const { return stmt_ != nullptr ? duckdb_prepare_error(stmt_) : nullptr; }
 
     private:
         duckdb_prepared_statement stmt_ = nullptr;
@@ -523,6 +531,7 @@ struct DuckdbWrapper::Impl
 {
     duckdb_database database = nullptr;
     duckdb_connection connection = nullptr;
+    FailureLogThrottle failureLogThrottle;
 };
 
 DuckdbWrapper::DuckdbWrapper(const std::string& dbName)
@@ -530,10 +539,16 @@ DuckdbWrapper::DuckdbWrapper(const std::string& dbName)
 {
     if (duckdb_open(dbName.c_str(), &m_Impl->database) != DuckDBSuccess)
     {
+        WriteLog(LogLevel::Error, "DuckdbWrapper: Open database failed. Path:%s", dbName.c_str());
         m_Impl->database = nullptr;
         return;
     }
-    duckdb_connect(m_Impl->database, &m_Impl->connection);
+    if (duckdb_connect(m_Impl->database, &m_Impl->connection) != DuckDBSuccess)
+    {
+        // 连接失败后连接句柄为空，后续所有语句都会静默失效，必须显式记录
+        WriteLog(LogLevel::Error, "DuckdbWrapper: Connect failed. Path:%s", dbName.c_str());
+        m_Impl->connection = nullptr;
+    }
 }
 DuckdbWrapper::~DuckdbWrapper()
 {
@@ -560,9 +575,19 @@ void DuckdbWrapper::DisConnect()
 }
 void DuckdbWrapper::Exec(const char* sql)
 {
-    if (!m_Impl->connection) return;
+    if (m_Impl->connection == nullptr)
+    {
+        // 连接为空时所有语句都会静默失效（含建表与批量写的事务控制），必须显式记录
+        WriteLog(LogLevel::Error, "DuckdbWrapper: EXEC skipped, database is not open. Sql:%s", sql);
+        return;
+    }
     duckdb_result result;
-    duckdb_query(m_Impl->connection, sql, &result);
+    if (duckdb_query(m_Impl->connection, sql, &result) != DuckDBSuccess)
+    {
+        const char* errorDetail = duckdb_result_error(&result);
+        WriteLog(LogLevel::Error, "DuckdbWrapper: EXEC failed. Error:%s, Sql:%s",
+            errorDetail != nullptr ? errorDetail : "unknown", sql);
+    }
     duckdb_destroy_result(&result);
 }
 
@@ -610,27 +635,61 @@ void DuckdbWrapper::TruncateTables(const TableSchema* const* schemas, int count)
 void DuckdbWrapper::Insert(const TableSchema* schema, const void* record)
 {
     std::string sql = MakeInsertSql(schema);
+    if (m_Impl->connection == nullptr)
+    {
+        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "INSERT", schema->tableName, "database is not open");
+        return;
+    }
     PreparedStatement stmt(m_Impl->connection, sql.c_str());
-    if (!stmt.IsValid()) return;
+    if (!stmt.IsValid())
+    {
+        const char* prepareError = stmt.GetPrepareError();
+        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "INSERT", schema->tableName,
+            prepareError != nullptr ? prepareError : "prepare failed");
+        return;
+    }
     BindAllFields(stmt.Get(), schema, record);
     duckdb_result result;
-    duckdb_execute_prepared(stmt.Get(), &result);
+    if (duckdb_execute_prepared(stmt.Get(), &result) != DuckDBSuccess)
+    {
+        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "INSERT", schema->tableName,
+            duckdb_result_error(&result));
+    }
     duckdb_destroy_result(&result);
 }
 void DuckdbWrapper::BatchInsert(const TableSchema* schema, const void* const* records, int count)
 {
+    const int failureCountBeforeBatch = m_Impl->failureLogThrottle.FailureCount();
     Exec("BEGIN;");
     for (int i = 0; i < count; ++i)
     {
         Insert(schema, records[i]);
     }
     Exec("COMMIT;");
+    const int failedRecordCount = m_Impl->failureLogThrottle.FailureCount() - failureCountBeforeBatch;
+    if (failedRecordCount > 0)
+    {
+        // 明细由 Insert 的节流上报给出，此处补充整批的失败规模（每条记录一次失败会被节流掩盖总量）
+        WriteLog(LogLevel::Error, "DuckdbWrapper: BATCH INSERT incomplete. Table:%s, FailedRecords:%d/%d",
+            schema->tableName, failedRecordCount, count);
+    }
 }
 void DuckdbWrapper::Update(const TableSchema* schema, const void* record)
 {
     std::string sql = MakeUpdateSql(schema);
+    if (m_Impl->connection == nullptr)
+    {
+        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "UPDATE", schema->tableName, "database is not open");
+        return;
+    }
     PreparedStatement stmt(m_Impl->connection, sql.c_str());
-    if (!stmt.IsValid()) return;
+    if (!stmt.IsValid())
+    {
+        const char* prepareError = stmt.GetPrepareError();
+        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "UPDATE", schema->tableName,
+            prepareError != nullptr ? prepareError : "prepare failed");
+        return;
+    }
 
     for (int i = 0; i < schema->fieldCount; ++i)
     {
@@ -645,19 +704,38 @@ void DuckdbWrapper::Update(const TableSchema* schema, const void* record)
     }
 
     duckdb_result result;
-    duckdb_execute_prepared(stmt.Get(), &result);
+    if (duckdb_execute_prepared(stmt.Get(), &result) != DuckDBSuccess)
+    {
+        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "UPDATE", schema->tableName,
+            duckdb_result_error(&result));
+    }
     duckdb_destroy_result(&result);
 }
 void DuckdbWrapper::Delete(const TableSchema* schema, const void* record,
                            const int* keyFieldIndices, int keyFieldCount)
 {
     std::string sql = MakeDeleteSql(schema, keyFieldIndices, keyFieldCount);
+    if (m_Impl->connection == nullptr)
+    {
+        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "DELETE", schema->tableName, "database is not open");
+        return;
+    }
     PreparedStatement stmt(m_Impl->connection, sql.c_str());
-    if (!stmt.IsValid()) return;
+    if (!stmt.IsValid())
+    {
+        const char* prepareError = stmt.GetPrepareError();
+        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "DELETE", schema->tableName,
+            prepareError != nullptr ? prepareError : "prepare failed");
+        return;
+    }
     BindKeyFields(stmt.Get(), schema, record, keyFieldIndices, keyFieldCount);
 
     duckdb_result result;
-    duckdb_execute_prepared(stmt.Get(), &result);
+    if (duckdb_execute_prepared(stmt.Get(), &result) != DuckDBSuccess)
+    {
+        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "DELETE", schema->tableName,
+            duckdb_result_error(&result));
+    }
     duckdb_destroy_result(&result);
 }
 
@@ -668,9 +746,16 @@ void DuckdbWrapper::SelectAll(const TableSchema* schema, void* recordsList,
     sql += schema->tableName;
     sql += ";";
 
+    if (m_Impl->connection == nullptr)
+    {
+        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "SELECT", schema->tableName, "database is not open");
+        return;
+    }
     duckdb_result result;
     if (duckdb_query(m_Impl->connection, sql.c_str(), &result) != DuckDBSuccess)
     {
+        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "SELECT", schema->tableName,
+            duckdb_result_error(&result));
         duckdb_destroy_result(&result);
         return;
     }
@@ -687,9 +772,17 @@ void DuckdbWrapper::SelectAll(const TableSchema* schema, void* recordsList,
 void DuckdbWrapper::SelectWithSql(const char* sql, const TableSchema* schema,
                                   void* recordsList, const RecordFactory& factory)
 {
+    if (m_Impl->connection == nullptr)
+    {
+        WriteLog(LogLevel::Error, "DuckdbWrapper: SELECT skipped, database is not open. Sql:%s", sql);
+        return;
+    }
     duckdb_result result;
     if (duckdb_query(m_Impl->connection, sql, &result) != DuckDBSuccess)
     {
+        const char* errorDetail = duckdb_result_error(&result);
+        WriteLog(LogLevel::Error, "DuckdbWrapper: SELECT failed. Error:%s, Sql:%s",
+            errorDetail != nullptr ? errorDetail : "unknown", sql);
         duckdb_destroy_result(&result);
         return;
     }

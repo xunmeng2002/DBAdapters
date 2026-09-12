@@ -31,14 +31,24 @@ DB* AsyncDBWriter::GetDB()
 }
 bool AsyncDBWriter::Connect()
 {
-	if (m_DB->Connect())
+	try
 	{
-		m_Connected = true;
-		if (m_DBSubscriber != nullptr)
+		if (m_DB->Connect())
 		{
-			m_DBSubscriber->OnDBConnected();
+			m_Connected = true;
+			WriteLog(LogLevel::Info, "AsyncDBWriter: DB connected.");
+			if (m_DBSubscriber != nullptr)
+			{
+				m_DBSubscriber->OnDBConnected();
+			}
+			return true;
 		}
-		return true;
+	}
+	catch (const std::exception& e)
+	{
+		// Connect 内的异常若逃出 Run() 会穿过 ThreadBase::ThreadFunc（无 catch）直达 std::terminate，故在此转为连接失败
+		WriteLog(LogLevel::Error, "AsyncDBWriter: Connect throw. Message:%s", e.what());
+		return false;
 	}
 	return false;
 }
@@ -51,12 +61,18 @@ void AsyncDBWriter::DisConnect()
 	}
 	m_DB->DisConnect();
 	lock_guard<mutex> guard(m_Mutex);
+	const size_t pendingCount = m_DBOperates.size();
 	for (auto item : m_DBOperates)
 	{
 		item->DeallocateRecord();
 		item->Deallocate();
 	}
 	m_DBOperates.clear();
+	if (pendingCount > 0)
+	{
+		// 这里会连同队列一起丢弃，不记录的话丢数据只能从"库里的行数比预期少"反推
+		WriteLog(LogLevel::Warning, "AsyncDBWriter: DisConnect discarded %d pending operations.", (int)pendingCount);
+	}
 }
 
 // ---- Generic MdbSubscriber overrides ----
@@ -138,9 +154,20 @@ void AsyncDBWriter::Run()
 }
 void AsyncDBWriter::CheckConnect()
 {
-	if (!m_Connected)
+	if (m_Connected)
 	{
-		Connect();
+		return;
+	}
+	if (Connect())
+	{
+		return;
+	}
+	// 未连接期间 HandleDBOperate 每轮都整队丢弃（见其入口分支），此处按固定尝试次数节流上报积压规模
+	const int connectFailureCount = m_ConnectFailureLogThrottle.RegisterFailure();
+	if (connectFailureCount > 0)
+	{
+		WriteLog(LogLevel::Error, "AsyncDBWriter: DB connect failed, %d operations pending and not written. ConnectFailureCount:%d",
+			PendingOperateCount(), connectFailureCount);
 	}
 }
 void AsyncDBWriter::CheckDBOperate()
@@ -148,10 +175,23 @@ void AsyncDBWriter::CheckDBOperate()
 	unique_lock<mutex> guard(m_Mutex);
 	m_ConditionVariable.wait_for(guard, m_TimeOut, [&] {return !m_DBOperates.empty(); });
 }
+void AsyncDBWriter::ThreadExit()
+{
+	ThreadBase::ThreadExit();
+	const int pendingCount = PendingOperateCount();
+	if (pendingCount > 0)
+	{
+		// 队列非空即退出 = 这些操作从未提交给后端，是"跑完没有落库"这件事在日志里唯一的痕迹
+		WriteLog(LogLevel::Error, "AsyncDBWriter: Exit with %d operations never written, database was not available.", pendingCount);
+	}
+}
 void AsyncDBWriter::HandleDBOperate()
 {
 	if (!m_Connected)
+	{
+		// 未连接时整队保留（不抽干、不释放），积压规模与原因由 CheckConnect 同轮上报
 		return;
+	}
 	DBOperate* dbOperate = nullptr;
 	try
 	{
@@ -175,12 +215,20 @@ void AsyncDBWriter::HandleDBOperate()
 			dbOperate->Deallocate();
 		}
 	}
-	catch(exception e)
+	catch(const exception& e)
 	{
-		WriteLog(LogLevel::Warning, "HandleDBOperate Failed. TableID;0x%X, Operate:%d, Message:%s", dbOperate->TableID, (int)dbOperate->Operate, e.what());
+		const unsigned int failedTableID = dbOperate != nullptr ? dbOperate->TableID : 0;
+		const int failedOperateType = dbOperate != nullptr ? static_cast<int>(dbOperate->Operate) : -1;
+		const TableSchema* failedSchema = m_SchemaRegistry != nullptr ? m_SchemaRegistry->GetSchema(failedTableID) : nullptr;
+		WriteLog(LogLevel::Error, "AsyncDBWriter: HandleDBOperate failed. TableID:0x%X, Table:%s, Operate:%d, Message:%s",
+			failedTableID, failedSchema != nullptr ? failedSchema->tableName : "unknown", failedOperateType, e.what());
+		// DisConnect 会连同队列一起丢弃并上报丢弃条数
 		DisConnect();
-		dbOperate->DeallocateRecord();
-		dbOperate->Deallocate();
+		if (dbOperate != nullptr)
+		{
+			dbOperate->DeallocateRecord();
+			dbOperate->Deallocate();
+		}
 		this_thread::sleep_for(chrono::seconds(5));
 	}
 }
@@ -194,6 +242,11 @@ DBOperate* AsyncDBWriter::GetDBOperate()
 	auto item = m_DBOperates.front();
 	m_DBOperates.pop_front();
 	return item;
+}
+int AsyncDBWriter::PendingOperateCount()
+{
+	lock_guard<mutex> guard(m_Mutex);
+	return static_cast<int>(m_DBOperates.size());
 }
 
 

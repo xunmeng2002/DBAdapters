@@ -443,6 +443,62 @@ static void TestDuckdbVectorizedMultiChunk()
     delete duckdb;
 }
 
+// 失败可见性验证：以下操作刻意打在不存在的库/表上，日志中应出现对应 ERROR 行（属预期输出，不代表测试失败）
+static void TestFailureVisibility()
+{
+    WriteLog(LogLevel::Info, "===== 失败可见性验证开始：其后 ERROR 为刻意触发 =====");
+
+    const TableSchema& schema = mdb::TestTickRow::GetSchema();
+    mdb::TestTickRow tick;
+    memset(&tick, 0, sizeof(mdb::TestTickRow));
+    RecordFactory factory = {
+        []() -> void* { return mdb::TestTickRow::Allocate(); },
+        [](void* records, void* record) {
+            static_cast<std::vector<mdb::TestTickRow*>*>(records)->push_back(
+                static_cast<mdb::TestTickRow*>(record));
+        },
+    };
+    const int keyIndices[] = { 0, 1 };
+
+    // 1) 目录不存在：构造期报 Open database failed；句柄为空时建表/插入/查询/带事务的批量写都应逐条上报
+    SqliteWrapper unavailableSqlite("./NoSuchDir/NoSuchFile.sqlitedb");
+    unavailableSqlite.CreateTable(&schema);
+    unavailableSqlite.Insert(&schema, &tick);
+    const void* twoRecords[] = { &tick, &tick };
+    unavailableSqlite.BatchInsert(&schema, twoRecords, 2);
+    std::vector<mdb::TestTickRow*> unavailableRecords;
+    unavailableSqlite.SelectAll(&schema, &unavailableRecords, factory);
+
+    // 2) 库可打开但表不存在：语句级失败（prepare/step）与整批失败规模都应上报
+    SqliteWrapper missingTableSqlite(":memory:");
+    missingTableSqlite.Insert(&schema, &tick);
+    missingTableSqlite.BatchInsert(&schema, twoRecords, 2);
+    missingTableSqlite.Update(&schema, &tick);
+    missingTableSqlite.Delete(&schema, &tick, keyIndices, 2);
+    std::vector<mdb::TestTickRow*> missingTableRecords;
+    missingTableSqlite.SelectAll(&schema, &missingTableRecords, factory);
+
+    DuckdbWrapper missingTableDuckdb(":memory:");
+    missingTableDuckdb.Insert(&schema, &tick);
+    missingTableDuckdb.BatchInsert(&schema, twoRecords, 2);
+    std::vector<mdb::TestTickRow*> missingTableDuckdbRecords;
+    missingTableDuckdb.SelectAll(&schema, &missingTableDuckdbRecords, factory);
+
+    for (auto record : unavailableRecords)
+    {
+        record->Deallocate();
+    }
+    for (auto record : missingTableRecords)
+    {
+        record->Deallocate();
+    }
+    for (auto record : missingTableDuckdbRecords)
+    {
+        record->Deallocate();
+    }
+    WriteLog(LogLevel::Info, "===== 失败可见性验证结束 =====");
+}
+
 int main(int argc, char* argv[])
 {
 	Logger::GetInstance().Init(argv[0]);
@@ -453,6 +509,7 @@ int main(int argc, char* argv[])
     TestDuckdb();
     TestDuckdbVectorized();
     TestDuckdbVectorizedMultiChunk();
+    TestFailureVisibility();
     //TestMysql();
     //TestMariadb();
 

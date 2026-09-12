@@ -59,13 +59,14 @@ find_package(lz4 CONFIG REQUIRED)
 find_package(zstd CONFIG REQUIRED)
 
 
+# 各 wrapper 的后端错误（连接失败/语句失败）经 FailureLogThrottle 走 Spark 日志上报，故统一私有链接 Spark::Core
 target_link_libraries(AsyncDBWriter PRIVATE Spark::Core)
-target_link_libraries(DuckdbWrapper PUBLIC DBInterface PRIVATE duckdb::duckdb)
-target_link_libraries(SqliteWrapper PUBLIC DBInterface PRIVATE unofficial::sqlite3::sqlite3)
-target_link_libraries(MysqlWrapper PUBLIC DBInterface PRIVATE unofficial::mysql-connector-cpp::connector protobuf::libprotobuf LZ4::lz4 zstd::libzstd)
+target_link_libraries(DuckdbWrapper PUBLIC DBInterface PRIVATE Spark::Core duckdb::duckdb)
+target_link_libraries(SqliteWrapper PUBLIC DBInterface PRIVATE Spark::Core unofficial::sqlite3::sqlite3)
+target_link_libraries(MysqlWrapper PUBLIC DBInterface PRIVATE Spark::Core unofficial::mysql-connector-cpp::connector protobuf::libprotobuf LZ4::lz4 zstd::libzstd)
 
 
-target_link_libraries(MariadbWrapper PUBLIC DBInterface PRIVATE unofficial::mariadb-connector-cpp::mariadbcpp)
+target_link_libraries(MariadbWrapper PUBLIC DBInterface PRIVATE Spark::Core unofficial::mariadb-connector-cpp::mariadbcpp)
 
 # libmariadb 运行时动态加载认证插件（非 PE 依赖，无法通过 vcpkg applocal 自动部署）
 # 编译时注入插件路径，Connect() 内设环境变量 MARIADB_PLUGIN_DIR 告知 libmariadb
