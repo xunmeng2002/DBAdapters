@@ -225,7 +225,7 @@ struct Account
 const FieldDescriptor Account::Fields[3] = {
     {"AccountID",   FieldType::Char, offsetof(Account, AccountID),   sizeof(Account::AccountID)},
     {"AccountName", FieldType::Char, offsetof(Account, AccountName), sizeof(Account::AccountName)},
-    {"AccountType", FieldType::Int,  offsetof(Account, AccountType), 0},
+    {"AccountType", FieldType::Int32, offsetof(Account, AccountType), 0},
 };
 const int Account::PrimaryKey[1] = {0};
 const TableSchema& Account::GetSchema()
@@ -306,7 +306,7 @@ static const FieldDescriptor TickRowFields[] = {
     {"LastPrice",     FieldType::Double, offsetof(TickRow, LastPrice),     0},
     {"PreClosePrice", FieldType::Double, offsetof(TickRow, PreClosePrice), 0},
     {"Volume",        FieldType::Int64,  offsetof(TickRow, Volume),        0},
-    {"BarPeriod",     FieldType::Int,    offsetof(TickRow, BarPeriod),     0},
+    {"BarPeriod",     FieldType::Int32,  offsetof(TickRow, BarPeriod),     0},
     {"IsValid",       FieldType::Bool,   offsetof(TickRow, IsValid),       0},
 };
 static void DeallocateTickRow(void* record) { static_cast<TickRow*>(record)->Deallocate(); }

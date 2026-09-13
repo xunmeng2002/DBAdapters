@@ -20,11 +20,31 @@ namespace dbadapters
         const char* data = static_cast<const char*>(record) + field.offset;
         switch (field.type)
         {
-        case FieldType::Int:
-            pstmt->setInt(paramIndex, *reinterpret_cast<const int*>(data));
+        case FieldType::Int8:
+            pstmt->setByte(paramIndex, *reinterpret_cast<const int8_t*>(data));
+            break;
+        case FieldType::UInt8:
+            // 连接器没有 setUByte：UInt8 的最大值 255 能无损放进 setShort 的 int16_t
+            pstmt->setShort(paramIndex, *reinterpret_cast<const uint8_t*>(data));
+            break;
+        case FieldType::Int16:
+            pstmt->setShort(paramIndex, *reinterpret_cast<const int16_t*>(data));
+            break;
+        case FieldType::UInt16:
+            // 连接器没有 setUShort：UInt16 的最大值 65535 能无损放进 setInt 的 int32_t
+            pstmt->setInt(paramIndex, *reinterpret_cast<const uint16_t*>(data));
+            break;
+        case FieldType::Int32:
+            pstmt->setInt(paramIndex, *reinterpret_cast<const int32_t*>(data));
+            break;
+        case FieldType::UInt32:
+            pstmt->setUInt(paramIndex, *reinterpret_cast<const uint32_t*>(data));
             break;
         case FieldType::Int64:
-            pstmt->setInt64(paramIndex, *reinterpret_cast<const long long*>(data));
+            pstmt->setInt64(paramIndex, *reinterpret_cast<const int64_t*>(data));
+            break;
+        case FieldType::UInt64:
+            pstmt->setUInt64(paramIndex, *reinterpret_cast<const uint64_t*>(data));
             break;
         case FieldType::Double:
             pstmt->setDouble(paramIndex, *reinterpret_cast<const double*>(data));
@@ -55,8 +75,14 @@ namespace dbadapters
             sql << "`" << f.name << "` ";
             switch (f.type)
             {
-            case FieldType::Int:    sql << "int"; break;
+            case FieldType::Int8:   sql << "tinyint"; break;
+            case FieldType::UInt8:  sql << "tinyint unsigned"; break;
+            case FieldType::Int16:  sql << "smallint"; break;
+            case FieldType::UInt16: sql << "smallint unsigned"; break;
+            case FieldType::Int32:  sql << "int"; break;
+            case FieldType::UInt32: sql << "int unsigned"; break;
             case FieldType::Int64:  sql << "bigint"; break;
+            case FieldType::UInt64: sql << "bigint unsigned"; break;
             case FieldType::Double: sql << "double"; break;
             case FieldType::Char:   sql << "char(" << f.arraySize << ")"; break;
             case FieldType::Bool:   sql << "bool"; break;
@@ -129,7 +155,8 @@ namespace dbadapters
         return sql.str();
     }
 
-    void ReadRow(sql::ResultSet* result, const TableSchema* schema, void* record)
+    void ReadRow(sql::ResultSet* result, const TableSchema* schema, void* record,
+                 int& clampedCount)
     {
         char* data = static_cast<char*>(record);
         for (int i = 0; i < schema->fieldCount; ++i)
@@ -139,11 +166,21 @@ namespace dbadapters
             int colIndex = i + 1;
             switch (field.type)
             {
-            case FieldType::Int:
-                *reinterpret_cast<int*>(dest) = result->getInt(colIndex);
-                break;
+            case FieldType::Int8:
+            case FieldType::UInt8:
+            case FieldType::Int16:
+            case FieldType::UInt16:
+            case FieldType::Int32:
+            case FieldType::UInt32:
             case FieldType::Int64:
-                *reinterpret_cast<long long*>(dest) = result->getInt64(colIndex);
+                if (!TryWriteIntegerFromSigned(result->getInt64(colIndex), field.type, dest))
+                {
+                    ++clampedCount;
+                }
+                break;
+            case FieldType::UInt64:
+                // UInt64 只能走无符号入口，同 BindField
+                *reinterpret_cast<uint64_t*>(dest) = result->getUInt64(colIndex);
                 break;
             case FieldType::Double:
                 *reinterpret_cast<double*>(dest) = static_cast<double>(result->getDouble(colIndex));
@@ -162,6 +199,33 @@ namespace dbadapters
                 break;
             }
         }
+    }
+
+    // 读取侧收窄饱和在整次 SELECT 结束后汇总上报一条 Warning：逐格上报会被行数淹没。
+    void LogClampedCells(const TableSchema* schema, int clampedCount, int totalRowCount)
+    {
+        if (clampedCount > 0)
+        {
+            WriteLog(LogLevel::Warning,
+                "MariadbWrapper: SELECT narrowed out-of-range values. Table:%s, ClampedCells:%d/%d",
+                schema->tableName, clampedCount, totalRowCount * schema->fieldCount);
+        }
+    }
+
+    // 把结果集里的全部行交给 factory。写入侧不会饱和：窄化交给列类型，越界由服务器报错抛出。
+    void ReadResultRows(sql::ResultSet* result, const TableSchema* schema, void* recordsList,
+                        const RecordFactory& factory)
+    {
+        int clampedCount = 0;
+        int totalRowCount = 0;
+        while (result->next())
+        {
+            void* record = factory.Allocate();
+            ReadRow(result, schema, record, clampedCount);
+            factory.PushBack(recordsList, record);
+            ++totalRowCount;
+        }
+        LogClampedCells(schema, clampedCount, totalRowCount);
     }
 
     struct SqlConnectionDeleter
@@ -358,12 +422,7 @@ void MariadbWrapper::SelectAll(const TableSchema* schema, void* recordsList,
     }
     auto result = std::unique_ptr<sql::ResultSet>(
         m_Impl->m_Statement->executeQuery(sql));
-    while (result->next())
-    {
-        void* record = factory.Allocate();
-        ReadRow(result.get(), schema, record);
-        factory.PushBack(recordsList, record);
-    }
+    ReadResultRows(result.get(), schema, recordsList, factory);
 }
 
 void MariadbWrapper::SelectWithSql(const char* sql, const TableSchema* schema,
@@ -376,11 +435,6 @@ void MariadbWrapper::SelectWithSql(const char* sql, const TableSchema* schema,
     }
     auto result = std::unique_ptr<sql::ResultSet>(
         m_Impl->m_Statement->executeQuery(sql));
-    while (result->next())
-    {
-        void* record = factory.Allocate();
-        ReadRow(result.get(), schema, record);
-        factory.PushBack(recordsList, record);
-    }
+    ReadResultRows(result.get(), schema, recordsList, factory);
 }
 }

@@ -40,16 +40,50 @@ namespace dbadapters
 	    sqlite3_stmt* stmt_ = nullptr;
     };
 
-    void BindField(sqlite3_stmt* stmt, int index, const FieldDescriptor& field, const void* record)
+    // SQLite 没有无符号整数列，所有整数列都是二补数 8 字节，因此绑定一律走 sqlite3_bind_int64：
+    // 不用 sqlite3_bind_int，它会把 UInt32 的 4e9 截断。
+    long long ReadIntegerFieldForBind(FieldType type, const char* data, int& clampedCount)
+    {
+	    switch (type)
+	    {
+	    case FieldType::Int8:   return *reinterpret_cast<const int8_t*>(data);
+	    case FieldType::UInt8:  return *reinterpret_cast<const uint8_t*>(data);
+	    case FieldType::Int16:  return *reinterpret_cast<const int16_t*>(data);
+	    case FieldType::UInt16: return *reinterpret_cast<const uint16_t*>(data);
+	    case FieldType::Int32:  return *reinterpret_cast<const int32_t*>(data);
+	    case FieldType::UInt32: return *reinterpret_cast<const uint32_t*>(data);
+	    case FieldType::Int64:  return *reinterpret_cast<const int64_t*>(data);
+	    case FieldType::UInt64:
+	    {
+		    const uint64_t value = *reinterpret_cast<const uint64_t*>(data);
+		    if (value > static_cast<uint64_t>(std::numeric_limits<long long>::max()))
+		    {
+			    // SQLite 的 8 字节整数是二补数：位模式可保真落库，但 ≥2^63 的值在 SQL 语义层
+			    // （WHERE/ORDER BY/聚合）以负数存在，故按 INT64_MAX 饱和并计数上报，不做位模式直传。
+			    ++clampedCount;
+			    return std::numeric_limits<long long>::max();
+		    }
+		    return static_cast<long long>(value);
+	    }
+	    default:                return 0;
+	    }
+    }
+
+    void BindField(sqlite3_stmt* stmt, int index, const FieldDescriptor& field, const void* record,
+                   int& clampedCount)
     {
 	    const char* data = static_cast<const char*>(record) + field.offset;
 	    switch (field.type)
 	    {
-	    case FieldType::Int:
-		    sqlite3_bind_int(stmt, index, *reinterpret_cast<const int*>(data));
-		    break;
+	    case FieldType::Int8:
+	    case FieldType::UInt8:
+	    case FieldType::Int16:
+	    case FieldType::UInt16:
+	    case FieldType::Int32:
+	    case FieldType::UInt32:
 	    case FieldType::Int64:
-		    sqlite3_bind_int64(stmt, index, *reinterpret_cast<const long long*>(data));
+	    case FieldType::UInt64:
+		    sqlite3_bind_int64(stmt, index, ReadIntegerFieldForBind(field.type, data, clampedCount));
 		    break;
 	    case FieldType::Double:
 		    sqlite3_bind_double(stmt, index, *reinterpret_cast<const double*>(data));
@@ -62,21 +96,23 @@ namespace dbadapters
 		    break;
 	    }
     }
-    void BindFields(sqlite3_stmt* stmt, const TableSchema* schema, const void* record)
+    void BindFields(sqlite3_stmt* stmt, const TableSchema* schema, const void* record,
+                    int& clampedCount)
     {
 	    for (int i = 0; i < schema->fieldCount; ++i)
 	    {
-		    BindField(stmt, i + 1, schema->fields[i], record);
+		    BindField(stmt, i + 1, schema->fields[i], record, clampedCount);
 	    }
     }
-    void BindKeyFields(sqlite3_stmt* stmt, const TableSchema* schema, const void* record, const int* keyIndices, int keyCount)
+    void BindKeyFields(sqlite3_stmt* stmt, const TableSchema* schema, const void* record, const int* keyIndices, int keyCount,
+                       int& clampedCount)
     {
 	    for (int i = 0; i < keyCount; ++i)
 	    {
-		    BindField(stmt, i + 1, schema->fields[keyIndices[i]], record);
+		    BindField(stmt, i + 1, schema->fields[keyIndices[i]], record, clampedCount);
 	    }
     }
-    void ReadRow(sqlite3_stmt* stmt, const TableSchema* schema, void* record)
+    void ReadRow(sqlite3_stmt* stmt, const TableSchema* schema, void* record, int& clampedCount)
     {
 	    char* data = static_cast<char*>(record);
 	    for (int i = 0; i < schema->fieldCount; ++i)
@@ -85,11 +121,18 @@ namespace dbadapters
 		    char* dest = data + field.offset;
 		    switch (field.type)
 		    {
-		    case FieldType::Int:
-			    *reinterpret_cast<int*>(dest) = sqlite3_column_int(stmt, i);
-			    break;
+		    case FieldType::Int8:
+		    case FieldType::UInt8:
+		    case FieldType::Int16:
+		    case FieldType::UInt16:
+		    case FieldType::Int32:
+		    case FieldType::UInt32:
 		    case FieldType::Int64:
-			    *reinterpret_cast<long long*>(dest) = sqlite3_column_int64(stmt, i);
+		    case FieldType::UInt64:
+			    if (!TryWriteIntegerFromSigned(sqlite3_column_int64(stmt, i), field.type, dest))
+			    {
+				    ++clampedCount;
+			    }
 			    break;
 		    case FieldType::Double:
 			    *reinterpret_cast<double*>(dest) = sqlite3_column_double(stmt, i);
@@ -112,6 +155,36 @@ namespace dbadapters
 			    break;
 		    }
 	    }
+    }
+
+    // 收窄饱和在一次操作结束后汇总上报一条 Warning：逐格上报会被行数淹没。
+    void LogClampedCells(const char* operationName, const TableSchema* schema,
+                         int clampedCount, int totalCellCount)
+    {
+	    if (clampedCount > 0)
+	    {
+		    WriteLog(LogLevel::Warning,
+			    "SqliteWrapper: %s narrowed out-of-range values. Table:%s, ClampedCells:%d/%d",
+			    operationName, schema->tableName, clampedCount, totalCellCount);
+	    }
+    }
+
+    // 读语句到 EOF，把所有行交给 factory，返回最后一次 step 的返回码供调用方判错。
+    int ReadStatementRows(sqlite3_stmt* stmt, const TableSchema* schema, void* recordsList,
+                          const RecordFactory& factory)
+    {
+	    int clampedCount = 0;
+	    int totalRowCount = 0;
+	    int rc = SQLITE_ROW;
+	    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
+	    {
+		    void* record = factory.Allocate();
+		    ReadRow(stmt, schema, record, clampedCount);
+		    factory.PushBack(recordsList, record);
+		    ++totalRowCount;
+	    }
+	    LogClampedCells("SELECT", schema, clampedCount, totalRowCount * schema->fieldCount);
+	    return rc;
     }
 
 struct SqliteWrapper::Impl
@@ -195,8 +268,14 @@ void SqliteWrapper::CreateTable(const TableSchema* schema)
 		sql << f.name << " ";
 		switch (f.type)
 		{
-		case FieldType::Int:    sql << "int"; break;
-		case FieldType::Int64:  sql << "bigint"; break;
+		case FieldType::Int8:
+		case FieldType::UInt8:
+		case FieldType::Int16:
+		case FieldType::UInt16:
+		case FieldType::Int32:
+		case FieldType::UInt32: sql << "int"; break;
+		case FieldType::Int64:
+		case FieldType::UInt64: sql << "bigint"; break;
 		case FieldType::Double: sql << "double"; break;
 		case FieldType::Char:   sql << "char(" << f.arraySize << ")"; break;
 		case FieldType::Bool:   sql << "bool"; break;
@@ -281,13 +360,15 @@ void SqliteWrapper::Insert(const TableSchema* schema, const void* record)
 			sqlite3_errmsg(m_Impl->db));
 		return;
 	}
-	BindFields(stmt.Get(), schema, record);
+	int clampedCount = 0;
+	BindFields(stmt.Get(), schema, record, clampedCount);
 	const int rc = stmt.Step();
 	if (rc != SQLITE_DONE)
 	{
 		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "INSERT", schema->tableName,
 			sqlite3_errmsg(m_Impl->db));
 	}
+	LogClampedCells("INSERT", schema, clampedCount, schema->fieldCount);
 }
 void SqliteWrapper::BatchInsert(const TableSchema* schema, const void* const* records, int count)
 {
@@ -336,15 +417,16 @@ void SqliteWrapper::Update(const TableSchema* schema, const void* record)
 			sqlite3_errmsg(m_Impl->db));
 		return;
 	}
+	int clampedCount = 0;
 	for (int i = 0; i < schema->fieldCount; ++i)
 	{
-		BindField(stmt.Get(), i + 1, schema->fields[i], record);
+		BindField(stmt.Get(), i + 1, schema->fields[i], record, clampedCount);
 	}
 	int paramIndex = schema->fieldCount + 1;
 	for (int i = 0; i < schema->primaryKeyCount; ++i)
 	{
 		int idx = schema->primaryKeyIndices[i];
-		BindField(stmt.Get(), paramIndex, schema->fields[idx], record);
+		BindField(stmt.Get(), paramIndex, schema->fields[idx], record, clampedCount);
 		paramIndex++;
 	}
 	const int rc = stmt.Step();
@@ -353,6 +435,7 @@ void SqliteWrapper::Update(const TableSchema* schema, const void* record)
 		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "UPDATE", schema->tableName,
 			sqlite3_errmsg(m_Impl->db));
 	}
+	LogClampedCells("UPDATE", schema, clampedCount, schema->fieldCount + schema->primaryKeyCount);
 }
 void SqliteWrapper::Delete(const TableSchema* schema, const void* record, const int* keyFieldIndices, int keyFieldCount)
 {
@@ -377,13 +460,15 @@ void SqliteWrapper::Delete(const TableSchema* schema, const void* record, const 
 			sqlite3_errmsg(m_Impl->db));
 		return;
 	}
-	BindKeyFields(stmt.Get(), schema, record, keyFieldIndices, keyFieldCount);
+	int clampedCount = 0;
+	BindKeyFields(stmt.Get(), schema, record, keyFieldIndices, keyFieldCount, clampedCount);
 	const int rc = stmt.Step();
 	if (rc != SQLITE_DONE)
 	{
 		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "DELETE", schema->tableName,
 			sqlite3_errmsg(m_Impl->db));
 	}
+	LogClampedCells("DELETE", schema, clampedCount, keyFieldCount);
 }
 
 void SqliteWrapper::SelectAll(const TableSchema* schema, void* recordsList, const RecordFactory& factory)
@@ -405,13 +490,7 @@ void SqliteWrapper::SelectAll(const TableSchema* schema, void* recordsList, cons
 		return;
 	}
 
-	int rc = SQLITE_ROW;
-	while ((rc = stmt.Step()) == SQLITE_ROW)
-	{
-		void* record = factory.Allocate();
-		ReadRow(stmt.Get(), schema, record);
-		factory.PushBack(recordsList, record);
-	}
+	const int rc = ReadStatementRows(stmt.Get(), schema, recordsList, factory);
 	if (rc != SQLITE_DONE)
 	{
 		// 中途出错时旧实现只是静默结束循环，调用方会把半份结果当成完整结果
@@ -433,13 +512,7 @@ void SqliteWrapper::SelectWithSql(const char* sql, const TableSchema* schema, vo
 		return;
 	}
 
-	int rc = SQLITE_ROW;
-	while ((rc = stmt.Step()) == SQLITE_ROW)
-	{
-		void* record = factory.Allocate();
-		ReadRow(stmt.Get(), schema, record);
-		factory.PushBack(recordsList, record);
-	}
+	const int rc = ReadStatementRows(stmt.Get(), schema, recordsList, factory);
 	if (rc != SQLITE_DONE)
 	{
 		WriteLog(LogLevel::Error, "SqliteWrapper: SELECT failed. ReturnCode:%d, Error:%s, Sql:%s",

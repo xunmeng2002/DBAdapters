@@ -226,7 +226,7 @@ namespace mdb
         {"LastPrice",     FieldType::Double, offsetof(TestTickRow, LastPrice),     0},
         {"PreClosePrice", FieldType::Double, offsetof(TestTickRow, PreClosePrice), 0},
         {"Volume",        FieldType::Int64,  offsetof(TestTickRow, Volume),        0},
-        {"BarPeriod",     FieldType::Int,    offsetof(TestTickRow, BarPeriod),     0},
+        {"BarPeriod",     FieldType::Int32,  offsetof(TestTickRow, BarPeriod),     0},
         {"IsValid",       FieldType::Bool,   offsetof(TestTickRow, IsValid),       0},
     };
     static void DeallocateTestTickRow(void* record)
@@ -443,6 +443,448 @@ static void TestDuckdbVectorizedMultiChunk()
     delete duckdb;
 }
 
+// ============ 窄整数/无符号整数落库测试 ============
+
+namespace mdb
+{
+    // 成员相邻排布：旧实现把所有窄整数按 4 字节 Int 读写，会越界写坏相邻成员。
+    // Allocate 故意填 0xAB 脏值，"NULL 列写 0"与"漏改分支保留脏值"才能被区分开。
+    class TestNarrowRow
+    {
+    public:
+        int32_t  HeadGuard;
+        int8_t   MinInt8;
+        uint8_t  UInt8Value;
+        int16_t  MinInt16;
+        uint16_t UInt16Value;
+        int32_t  BodyGuard;
+        uint32_t UInt32Value;
+        uint64_t UInt64Value;
+        int32_t  TailGuard;
+
+        static TestNarrowRow* Allocate()
+        {
+            TestNarrowRow* row = new TestNarrowRow();
+            std::memset(row, 0xAB, sizeof(TestNarrowRow));
+            return row;
+        }
+        void Deallocate() { delete this; }
+        static const TableSchema& GetSchema();
+    };
+
+    static const int32_t  kHeadGuardValue = 0x11223344;
+    static const int32_t  kBodyGuardValue = 0x55667788;
+    static const int32_t  kTailGuardValue = 0x0A0B0C0D;
+    static const uint32_t kUInt32Value    = 0xFFFFFFFFu;
+    static const uint64_t kUInt64Value    = 0xFFFFFFFFFFFFFFFFull;
+
+    static const FieldDescriptor TestNarrowRowFields[] = {
+        {"HeadGuard",   FieldType::Int32,  offsetof(TestNarrowRow, HeadGuard),   0},
+        {"MinInt8",     FieldType::Int8,   offsetof(TestNarrowRow, MinInt8),     0},
+        {"UInt8Value",  FieldType::UInt8,  offsetof(TestNarrowRow, UInt8Value),  0},
+        {"MinInt16",    FieldType::Int16,  offsetof(TestNarrowRow, MinInt16),    0},
+        {"UInt16Value", FieldType::UInt16, offsetof(TestNarrowRow, UInt16Value), 0},
+        {"BodyGuard",   FieldType::Int32,  offsetof(TestNarrowRow, BodyGuard),   0},
+        {"UInt32Value", FieldType::UInt32, offsetof(TestNarrowRow, UInt32Value), 0},
+        {"UInt64Value", FieldType::UInt64, offsetof(TestNarrowRow, UInt64Value), 0},
+        {"TailGuard",   FieldType::Int32,  offsetof(TestNarrowRow, TailGuard),   0},
+    };
+    static void DeallocateTestNarrowRow(void* record)
+    {
+        static_cast<TestNarrowRow*>(record)->Deallocate();
+    }
+    const TableSchema& TestNarrowRow::GetSchema()
+    {
+        static const TableSchema schema = {
+            "t_test_narrow", TestNarrowRowFields, 9, nullptr, 0,
+            DeallocateTestNarrowRow, nullptr, 0,
+        };
+        return schema;
+    }
+
+    static TestNarrowRow* MakeNarrowRow()
+    {
+        TestNarrowRow* row = TestNarrowRow::Allocate();
+        row->HeadGuard   = kHeadGuardValue;
+        row->MinInt8     = std::numeric_limits<int8_t>::min();
+        row->UInt8Value  = 200;
+        row->MinInt16    = std::numeric_limits<int16_t>::min();
+        row->UInt16Value = std::numeric_limits<uint16_t>::max();
+        row->BodyGuard   = kBodyGuardValue;
+        row->UInt32Value = kUInt32Value;
+        row->UInt64Value = kUInt64Value;
+        row->TailGuard   = kTailGuardValue;
+        return row;
+    }
+
+    // SQLite 无无符号列，UInt64 ≥2^63 在绑定侧按 INT64_MAX 饱和，故期望值随后端不同。
+    static bool IsNarrowRowAsExpected(const TestNarrowRow& row, uint64_t expectedUInt64Value)
+    {
+        return row.HeadGuard   == kHeadGuardValue
+            && row.MinInt8     == std::numeric_limits<int8_t>::min()
+            && row.UInt8Value  == 200
+            && row.MinInt16    == std::numeric_limits<int16_t>::min()
+            && row.UInt16Value == std::numeric_limits<uint16_t>::max()
+            && row.BodyGuard   == kBodyGuardValue
+            && row.UInt32Value == kUInt32Value
+            && row.UInt64Value == expectedUInt64Value
+            && row.TailGuard   == kTailGuardValue;
+    }
+
+    static void DumpNarrowRow(const char* backend, const TestNarrowRow& row)
+    {
+        WriteLog(LogLevel::Error,
+            "%s narrow row: head=%d i8=%d u8=%u i16=%d u16=%u body=%d u32=%u u64=%llu tail=%d",
+            backend, row.HeadGuard, (int)row.MinInt8, (unsigned)row.UInt8Value,
+            (int)row.MinInt16, (unsigned)row.UInt16Value, row.BodyGuard,
+            (unsigned)row.UInt32Value, (unsigned long long)row.UInt64Value, row.TailGuard);
+    }
+}
+
+static RecordFactory MakeNarrowRowFactory()
+{
+    return RecordFactory{
+        []() -> void* { return mdb::TestNarrowRow::Allocate(); },
+        [](void* records, void* record) {
+            static_cast<std::vector<mdb::TestNarrowRow*>*>(records)->push_back(
+                static_cast<mdb::TestNarrowRow*>(record));
+        },
+    };
+}
+
+// 建表 + 插入一行边界值。SQLite 会在 UInt64 绑定侧饱和并告警（属预期输出）。
+template <typename Wrapper>
+static void InsertNarrowRow(Wrapper* db)
+{
+    const TableSchema& schema = mdb::TestNarrowRow::GetSchema();
+    db->CreateTable(&schema);
+    mdb::TestNarrowRow* row = mdb::MakeNarrowRow();
+    db->Insert(&schema, row);
+    row->Deallocate();
+}
+
+// 结果级读路径：Sqlite 与 Duckdb 都实现（Duckdb 走 duckdb_value_* 派发）。
+template <typename Wrapper>
+static void SelectNarrowRows(Wrapper* db, std::vector<mdb::TestNarrowRow*>& records)
+{
+    RecordFactory factory = MakeNarrowRowFactory();
+    db->SelectAll(&mdb::TestNarrowRow::GetSchema(), &records, factory);
+}
+
+// chunk 读路径：只有 Duckdb 有，走 BindChunkToRecords 与 WriteNullSentinel。
+static void SelectNarrowRowsVectorized(DuckdbWrapper* db, std::vector<mdb::TestNarrowRow*>& records)
+{
+    RecordFactory factory = MakeNarrowRowFactory();
+    std::string error = db->SelectWithSqlVectorized("SELECT * FROM t_test_narrow;",
+        &mdb::TestNarrowRow::GetSchema(), &records, factory);
+    if (!error.empty())
+    {
+        WriteLog(LogLevel::Error, "Duckdb narrow vectorized error: %s", error.c_str());
+    }
+}
+
+static void CheckNarrowRows(const char* backend, std::vector<mdb::TestNarrowRow*>& records,
+                            uint64_t expectedUInt64Value)
+{
+    bool pass = records.size() == 1;
+    if (pass)
+    {
+        pass = mdb::IsNarrowRowAsExpected(*records[0], expectedUInt64Value);
+        if (!pass)
+        {
+            mdb::DumpNarrowRow(backend, *records[0]);
+        }
+    }
+    else
+    {
+        WriteLog(LogLevel::Error, "%s narrow record count mismatch, expected 1 got %d",
+            backend, (int)records.size());
+    }
+    for (auto record : records)
+    {
+        record->Deallocate();
+    }
+    records.clear();
+    if (pass)
+    {
+        WriteLog(LogLevel::Info, "%s NarrowInteger PASS", backend);
+    }
+    else
+    {
+        WriteLog(LogLevel::Error, "%s NarrowInteger FAILED", backend);
+    }
+}
+
+// Allocate 已填 0xAB 脏值：NULL 列必须被写成 0，而不是留下脏值。
+static void CheckNarrowNullSentinel(const char* backend, std::vector<mdb::TestNarrowRow*>& records)
+{
+    bool pass = records.size() == 1
+        && records[0]->MinInt8 == 0
+        && records[0]->UInt8Value == 0
+        && records[0]->MinInt16 == 0
+        && records[0]->UInt16Value == 0
+        && records[0]->UInt32Value == 0
+        && records[0]->UInt64Value == 0;
+    if (!pass && !records.empty())
+    {
+        mdb::DumpNarrowRow(backend, *records[0]);
+    }
+    for (auto record : records)
+    {
+        record->Deallocate();
+    }
+    records.clear();
+    if (pass)
+    {
+        WriteLog(LogLevel::Info, "%s NarrowNullSentinel PASS", backend);
+    }
+    else
+    {
+        WriteLog(LogLevel::Error, "%s NarrowNullSentinel FAILED", backend);
+    }
+}
+
+static void TestSqliteNarrowInteger()
+{
+    SqliteWrapper* sqlite = new SqliteWrapper(":memory:");
+    WriteLog(LogLevel::Info, "TestDB with SqliteNarrow");
+    InsertNarrowRow(sqlite);
+
+    std::vector<mdb::TestNarrowRow*> records;
+    // SQLite 的 8 字节整数是二补数且无无符号列：0xFFFFFFFFFFFFFFFF 在绑定侧饱和到 INT64_MAX
+    SelectNarrowRows(sqlite, records);
+    CheckNarrowRows("Sqlite", records, (uint64_t)std::numeric_limits<int64_t>::max());
+
+    sqlite->Exec("DELETE FROM t_test_narrow;");
+    sqlite->Exec("INSERT INTO t_test_narrow (HeadGuard) VALUES (1);");
+    SelectNarrowRows(sqlite, records);
+    CheckNarrowNullSentinel("Sqlite", records);
+    delete sqlite;
+}
+
+static void TestSqliteNarrowSaturation()
+{
+    SqliteWrapper* sqlite = new SqliteWrapper(":memory:");
+    WriteLog(LogLevel::Info, "TestDB with SqliteNarrowSaturation");
+    // 手工建宽列：用 Wrapper 自己的 DDL 会把列建成窄类型，INSERT 阶段就失败，
+    // 读侧的收窄分支一行也走不到。期望 6 格饱和 + 一条 narrowed-out-of-range Warning。
+    sqlite->Exec("CREATE TABLE t_test_narrow_saturate (HeadGuard INTEGER, MinInt8 INTEGER, "
+                 "UInt8Value INTEGER, MinInt16 INTEGER, UInt16Value INTEGER, BodyGuard INTEGER, "
+                 "UInt32Value INTEGER, UInt64Value INTEGER, TailGuard INTEGER);");
+    sqlite->Exec("INSERT INTO t_test_narrow_saturate VALUES (1, 300, -5, -40000, 70000, "
+                 "3000000000, 5000000000, 2, 3);");
+
+    std::vector<mdb::TestNarrowRow*> records;
+    RecordFactory factory = MakeNarrowRowFactory();
+    sqlite->SelectWithSql("SELECT * FROM t_test_narrow_saturate;", &mdb::TestNarrowRow::GetSchema(),
+                          &records, factory);
+
+    bool pass = records.size() == 1;
+    if (pass)
+    {
+        const auto& row = *records[0];
+        pass = row.HeadGuard == 1
+            && row.MinInt8 == std::numeric_limits<int8_t>::max()
+            && row.UInt8Value == 0
+            && row.MinInt16 == std::numeric_limits<int16_t>::min()
+            && row.UInt16Value == std::numeric_limits<uint16_t>::max()
+            && row.BodyGuard == std::numeric_limits<int32_t>::max()
+            && row.UInt32Value == std::numeric_limits<uint32_t>::max()
+            && row.UInt64Value == 2
+            && row.TailGuard == 3;
+        if (!pass)
+        {
+            mdb::DumpNarrowRow("SqliteSaturation", row);
+        }
+    }
+    for (auto record : records)
+    {
+        record->Deallocate();
+    }
+    if (pass)
+    {
+        WriteLog(LogLevel::Info, "Sqlite NarrowSaturation PASS");
+    }
+    else
+    {
+        WriteLog(LogLevel::Error, "Sqlite NarrowSaturation FAILED");
+    }
+    delete sqlite;
+}
+
+static void TestDuckdbNarrowInteger()
+{
+    DuckdbWrapper* duckdb = new DuckdbWrapper(":memory:");
+    WriteLog(LogLevel::Info, "TestDB with DuckdbNarrow");
+    InsertNarrowRow(duckdb);
+
+    std::vector<mdb::TestNarrowRow*> records;
+    SelectNarrowRows(duckdb, records);
+    CheckNarrowRows("Duckdb", records, mdb::kUInt64Value);
+    SelectNarrowRowsVectorized(duckdb, records);
+    CheckNarrowRows("DuckdbVectorized", records, mdb::kUInt64Value);
+
+    // NULL 哨兵只走 chunk 路径：WriteNullSentinel 是那条路径独有的分支
+    duckdb->Exec("DELETE FROM t_test_narrow;");
+    duckdb->Exec("INSERT INTO t_test_narrow (HeadGuard) VALUES (1);");
+    SelectNarrowRowsVectorized(duckdb, records);
+    CheckNarrowNullSentinel("DuckdbVectorized", records);
+    delete duckdb;
+}
+
+static void TestDuckdbNarrowSaturation()
+{
+    DuckdbWrapper* duckdb = new DuckdbWrapper(":memory:");
+    WriteLog(LogLevel::Info, "TestDB with DuckdbNarrowSaturation");
+    duckdb->Exec("CREATE TABLE t_test_narrow_saturate (HeadGuard INTEGER, MinInt8 INTEGER, "
+                 "UInt8Value INTEGER, MinInt16 INTEGER, UInt16Value INTEGER, BodyGuard BIGINT, "
+                 "UInt32Value BIGINT, UInt64Value BIGINT, TailGuard INTEGER);");
+    duckdb->Exec("INSERT INTO t_test_narrow_saturate VALUES (1, 300, -5, -40000, 70000, "
+                 "3000000000, 5000000000, 2, 3);");
+
+    std::vector<mdb::TestNarrowRow*> records;
+    RecordFactory factory = MakeNarrowRowFactory();
+    std::string error = duckdb->SelectWithSqlVectorized(
+        "SELECT * FROM t_test_narrow_saturate;", &mdb::TestNarrowRow::GetSchema(),
+        &records, factory);
+    if (!error.empty())
+    {
+        WriteLog(LogLevel::Error, "Duckdb narrow saturation error: %s", error.c_str());
+    }
+
+    bool pass = records.size() == 1;
+    if (pass)
+    {
+        const auto& row = *records[0];
+        pass = row.HeadGuard == 1
+            && row.MinInt8 == std::numeric_limits<int8_t>::max()
+            && row.UInt8Value == 0
+            && row.MinInt16 == std::numeric_limits<int16_t>::min()
+            && row.UInt16Value == std::numeric_limits<uint16_t>::max()
+            && row.BodyGuard == std::numeric_limits<int32_t>::max()
+            && row.UInt32Value == std::numeric_limits<uint32_t>::max()
+            && row.UInt64Value == 2
+            && row.TailGuard == 3;
+        if (!pass)
+        {
+            mdb::DumpNarrowRow("DuckdbSaturation", row);
+        }
+    }
+    for (auto record : records)
+    {
+        record->Deallocate();
+    }
+    if (pass)
+    {
+        WriteLog(LogLevel::Info, "Duckdb NarrowSaturation PASS");
+    }
+    else
+    {
+        WriteLog(LogLevel::Error, "Duckdb NarrowSaturation FAILED");
+    }
+    delete duckdb;
+}
+
+// 往返测试验不出列类型（Duckdb 对窄整数有隐式转换），直接查 typeof 断言 DDL 映射。
+namespace mdb
+{
+    class TestTypeNameRow
+    {
+    public:
+        char MinInt8Type[16];
+        char UInt8Type[16];
+        char MinInt16Type[16];
+        char UInt16Type[16];
+        char UInt32Type[16];
+        char UInt64Type[16];
+        char HeadGuardType[16];
+
+        static TestTypeNameRow* Allocate() { return new TestTypeNameRow(); }
+        void Deallocate() { delete this; }
+        static const TableSchema& GetSchema();
+    };
+
+    static const FieldDescriptor TestTypeNameRowFields[] = {
+        {"MinInt8Type",   FieldType::Char, offsetof(TestTypeNameRow, MinInt8Type),   sizeof(TestTypeNameRow::MinInt8Type)},
+        {"UInt8Type",     FieldType::Char, offsetof(TestTypeNameRow, UInt8Type),     sizeof(TestTypeNameRow::UInt8Type)},
+        {"MinInt16Type",  FieldType::Char, offsetof(TestTypeNameRow, MinInt16Type),  sizeof(TestTypeNameRow::MinInt16Type)},
+        {"UInt16Type",    FieldType::Char, offsetof(TestTypeNameRow, UInt16Type),    sizeof(TestTypeNameRow::UInt16Type)},
+        {"UInt32Type",    FieldType::Char, offsetof(TestTypeNameRow, UInt32Type),    sizeof(TestTypeNameRow::UInt32Type)},
+        {"UInt64Type",    FieldType::Char, offsetof(TestTypeNameRow, UInt64Type),    sizeof(TestTypeNameRow::UInt64Type)},
+        {"HeadGuardType", FieldType::Char, offsetof(TestTypeNameRow, HeadGuardType), sizeof(TestTypeNameRow::HeadGuardType)},
+    };
+    static void DeallocateTestTypeNameRow(void* record)
+    {
+        static_cast<TestTypeNameRow*>(record)->Deallocate();
+    }
+    const TableSchema& TestTypeNameRow::GetSchema()
+    {
+        static const TableSchema schema = {
+            "t_test_typename", TestTypeNameRowFields, 7, nullptr, 0,
+            DeallocateTestTypeNameRow, nullptr, 0,
+        };
+        return schema;
+    }
+}
+
+static void TestDuckdbNarrowColumnTypes()
+{
+    DuckdbWrapper* duckdb = new DuckdbWrapper(":memory:");
+    WriteLog(LogLevel::Info, "TestDB with DuckdbNarrowColumnTypes");
+    InsertNarrowRow(duckdb);
+
+    RecordFactory factory = {
+        []() -> void* { return mdb::TestTypeNameRow::Allocate(); },
+        [](void* records, void* record) {
+            static_cast<std::vector<mdb::TestTypeNameRow*>*>(records)->push_back(
+                static_cast<mdb::TestTypeNameRow*>(record));
+        },
+    };
+    std::vector<mdb::TestTypeNameRow*> records;
+    duckdb->SelectWithSql(
+        "SELECT typeof(MinInt8), typeof(UInt8Value), typeof(MinInt16), typeof(UInt16Value), "
+        "typeof(UInt32Value), typeof(UInt64Value), typeof(HeadGuard) FROM t_test_narrow;",
+        &mdb::TestTypeNameRow::GetSchema(), &records, factory);
+
+    bool pass = records.size() == 1;
+    if (pass)
+    {
+        const auto& row = *records[0];
+        pass = strcmp(row.MinInt8Type, "TINYINT") == 0
+            && strcmp(row.UInt8Type, "UTINYINT") == 0
+            && strcmp(row.MinInt16Type, "SMALLINT") == 0
+            && strcmp(row.UInt16Type, "USMALLINT") == 0
+            && strcmp(row.UInt32Type, "UINTEGER") == 0
+            && strcmp(row.UInt64Type, "UBIGINT") == 0
+            && strcmp(row.HeadGuardType, "INTEGER") == 0;
+        if (!pass)
+        {
+            WriteLog(LogLevel::Error,
+                "Duckdb column types: i8=%s u8=%s i16=%s u16=%s u32=%s u64=%s guard=%s",
+                row.MinInt8Type, row.UInt8Type, row.MinInt16Type, row.UInt16Type,
+                row.UInt32Type, row.UInt64Type, row.HeadGuardType);
+        }
+    }
+    else
+    {
+        WriteLog(LogLevel::Error, "Duckdb typeof query returned %d rows, expected 1",
+            (int)records.size());
+    }
+    for (auto record : records)
+    {
+        record->Deallocate();
+    }
+    if (pass)
+    {
+        WriteLog(LogLevel::Info, "Duckdb NarrowColumnTypes PASS");
+    }
+    else
+    {
+        WriteLog(LogLevel::Error, "Duckdb NarrowColumnTypes FAILED");
+    }
+    delete duckdb;
+}
+
 // 失败可见性验证：以下操作刻意打在不存在的库/表上，日志中应出现对应 ERROR 行（属预期输出，不代表测试失败）
 static void TestFailureVisibility()
 {
@@ -509,6 +951,11 @@ int main(int argc, char* argv[])
     TestDuckdb();
     TestDuckdbVectorized();
     TestDuckdbVectorizedMultiChunk();
+    TestSqliteNarrowInteger();
+    TestSqliteNarrowSaturation();
+    TestDuckdbNarrowInteger();
+    TestDuckdbNarrowSaturation();
+    TestDuckdbNarrowColumnTypes();
     TestFailureVisibility();
     //TestMysql();
     //TestMariadb();

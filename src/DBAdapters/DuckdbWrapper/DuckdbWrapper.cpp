@@ -73,11 +73,29 @@ namespace dbadapters
         const char* data = static_cast<const char*>(record) + field.offset;
         switch (field.type)
         {
-        case FieldType::Int:
-            duckdb_bind_int32(stmt, index, *reinterpret_cast<const int*>(data));
+        case FieldType::Int8:
+            duckdb_bind_int8(stmt, index, *reinterpret_cast<const int8_t*>(data));
+            break;
+        case FieldType::UInt8:
+            duckdb_bind_uint8(stmt, index, *reinterpret_cast<const uint8_t*>(data));
+            break;
+        case FieldType::Int16:
+            duckdb_bind_int16(stmt, index, *reinterpret_cast<const int16_t*>(data));
+            break;
+        case FieldType::UInt16:
+            duckdb_bind_uint16(stmt, index, *reinterpret_cast<const uint16_t*>(data));
+            break;
+        case FieldType::Int32:
+            duckdb_bind_int32(stmt, index, *reinterpret_cast<const int32_t*>(data));
+            break;
+        case FieldType::UInt32:
+            duckdb_bind_uint32(stmt, index, *reinterpret_cast<const uint32_t*>(data));
             break;
         case FieldType::Int64:
-            duckdb_bind_int64(stmt, index, *reinterpret_cast<const long long*>(data));
+            duckdb_bind_int64(stmt, index, *reinterpret_cast<const int64_t*>(data));
+            break;
+        case FieldType::UInt64:
+            duckdb_bind_uint64(stmt, index, *reinterpret_cast<const uint64_t*>(data));
             break;
         case FieldType::Double:
             duckdb_bind_double(stmt, index, *reinterpret_cast<const double*>(data));
@@ -109,7 +127,30 @@ namespace dbadapters
         }
     }
 
-    void ReadRow(duckdb_result& result, idx_t row, const TableSchema* schema, void* record)
+    // duckdb 的 UBIGINT/UINTEGER/USMALLINT/UTINYINT 是无符号列类型，其余整数列按有符号处理。
+    bool IsUnsignedDuckdbType(duckdb_type type)
+    {
+        return type == DUCKDB_TYPE_UBIGINT || type == DUCKDB_TYPE_UINTEGER ||
+               type == DUCKDB_TYPE_USMALLINT || type == DUCKDB_TYPE_UTINYINT;
+    }
+
+    // 结果级（duckdb_value_* 路径）读一个整数单元格并收窄写入 dest，返回 false 表示按目标类型饱和。
+    // 按列的实际符号选最宽访问器：duckdb_value_int8/int16/int32 一类在值越界时静默返回 0，
+    // 会把 0 当成读到的值写进记录，这里一律不用。
+    bool ReadResultCellAsInteger(duckdb_result& result, idx_t columnIndex, idx_t row,
+                                 FieldType targetType, char* dest)
+    {
+        if (IsUnsignedDuckdbType(duckdb_column_type(&result, columnIndex)))
+        {
+            return TryWriteIntegerFromUnsigned(duckdb_value_uint64(&result, columnIndex, row),
+                                               targetType, dest);
+        }
+        return TryWriteIntegerFromSigned(duckdb_value_int64(&result, columnIndex, row),
+                                         targetType, dest);
+    }
+
+    void ReadRow(duckdb_result& result, idx_t row, const TableSchema* schema, void* record,
+                 int& clampedCount)
     {
         char* data = static_cast<char*>(record);
         for (int i = 0; i < schema->fieldCount; ++i)
@@ -118,11 +159,18 @@ namespace dbadapters
             char* dest = data + field.offset;
             switch (field.type)
             {
-            case FieldType::Int:
-                *reinterpret_cast<int*>(dest) = duckdb_value_int32(&result, i, row);
-                break;
+            case FieldType::Int8:
+            case FieldType::UInt8:
+            case FieldType::Int16:
+            case FieldType::UInt16:
+            case FieldType::Int32:
+            case FieldType::UInt32:
             case FieldType::Int64:
-                *reinterpret_cast<long long*>(dest) = duckdb_value_int64(&result, i, row);
+            case FieldType::UInt64:
+                if (!ReadResultCellAsInteger(result, i, row, field.type, dest))
+                {
+                    ++clampedCount;
+                }
                 break;
             case FieldType::Double:
                 *reinterpret_cast<double*>(dest) = duckdb_value_double(&result, i, row);
@@ -146,6 +194,32 @@ namespace dbadapters
         }
     }
 
+    // 读取侧收窄饱和在整次 SELECT 结束后汇总上报一条 Warning：逐格上报会被行数淹没。
+    void LogClampedCells(const TableSchema* schema, int clampedCount, int totalRowCount)
+    {
+        if (clampedCount > 0)
+        {
+            WriteLog(LogLevel::Warning,
+                "DuckdbWrapper: SELECT narrowed out-of-range values. Table:%s, ClampedCells:%d/%d",
+                schema->tableName, clampedCount, totalRowCount * schema->fieldCount);
+        }
+    }
+
+    // 把结果级读到的全部行交给 factory。
+    void ReadResultRows(duckdb_result& result, const TableSchema* schema, void* recordsList,
+                        const RecordFactory& factory)
+    {
+        const idx_t rowCount = duckdb_row_count(&result);
+        int clampedCount = 0;
+        for (idx_t row = 0; row < rowCount; ++row)
+        {
+            void* record = factory.Allocate();
+            ReadRow(result, row, schema, record, clampedCount);
+            factory.PushBack(recordsList, record);
+        }
+        LogClampedCells(schema, clampedCount, static_cast<int>(rowCount));
+    }
+
     void WriteNullSentinel(char* dest, FieldType type)
     {
         switch (type)
@@ -153,11 +227,29 @@ namespace dbadapters
         case FieldType::Double:
             *reinterpret_cast<double*>(dest) = std::numeric_limits<double>::infinity();
             break;
-        case FieldType::Int64:
-            *reinterpret_cast<long long*>(dest) = 0;
+        case FieldType::Int8:
+            *reinterpret_cast<int8_t*>(dest) = 0;
             break;
-        case FieldType::Int:
-            *reinterpret_cast<int*>(dest) = 0;
+        case FieldType::UInt8:
+            *reinterpret_cast<uint8_t*>(dest) = 0;
+            break;
+        case FieldType::Int16:
+            *reinterpret_cast<int16_t*>(dest) = 0;
+            break;
+        case FieldType::UInt16:
+            *reinterpret_cast<uint16_t*>(dest) = 0;
+            break;
+        case FieldType::Int32:
+            *reinterpret_cast<int32_t*>(dest) = 0;
+            break;
+        case FieldType::UInt32:
+            *reinterpret_cast<uint32_t*>(dest) = 0;
+            break;
+        case FieldType::Int64:
+            *reinterpret_cast<int64_t*>(dest) = 0;
+            break;
+        case FieldType::UInt64:
+            *reinterpret_cast<uint64_t*>(dest) = 0;
             break;
         case FieldType::Bool:
             *reinterpret_cast<bool*>(dest) = false;
@@ -251,6 +343,49 @@ namespace dbadapters
             return static_cast<bool*>(rawData)[row] ? 1 : 0;
         default:
             return 0;
+        }
+    }
+
+    // 从 chunk 向量按源类型取 uint64；带符号源为负、或源类型无法无损映射时置 0 并把 clamped 置真。
+    unsigned long long ReadCellAsUInt64(duckdb_type sourceType, void* rawData, idx_t row,
+                                        uint8_t decimalWidth, uint8_t decimalScale, bool& clamped)
+    {
+        switch (sourceType)
+        {
+        case DUCKDB_TYPE_UBIGINT:
+            return static_cast<unsigned long long*>(rawData)[row];
+        case DUCKDB_TYPE_UINTEGER:
+            return static_cast<unsigned int*>(rawData)[row];
+        case DUCKDB_TYPE_USMALLINT:
+            return static_cast<unsigned short*>(rawData)[row];
+        case DUCKDB_TYPE_UTINYINT:
+            return static_cast<unsigned char*>(rawData)[row];
+        case DUCKDB_TYPE_BIGINT:
+            return SaturatingToUInt64(static_cast<long long*>(rawData)[row], clamped);
+        case DUCKDB_TYPE_INTEGER:
+            return SaturatingToUInt64(static_cast<int*>(rawData)[row], clamped);
+        case DUCKDB_TYPE_SMALLINT:
+            return SaturatingToUInt64(static_cast<short*>(rawData)[row], clamped);
+        case DUCKDB_TYPE_TINYINT:
+            return SaturatingToUInt64(static_cast<signed char*>(rawData)[row], clamped);
+        case DUCKDB_TYPE_DOUBLE:
+            return SaturatingToUInt64(static_cast<long long>(static_cast<double*>(rawData)[row]), clamped);
+        case DUCKDB_TYPE_FLOAT:
+            return SaturatingToUInt64(static_cast<long long>(static_cast<float*>(rawData)[row]), clamped);
+        case DUCKDB_TYPE_DECIMAL:
+        {
+            duckdb_hugeint value = static_cast<duckdb_hugeint*>(rawData)[row];
+            return SaturatingToUInt64(static_cast<long long>(
+                duckdb_decimal_to_double(duckdb_decimal{ decimalWidth, decimalScale, value })), clamped);
+        }
+        case DUCKDB_TYPE_HUGEINT:
+            return SaturatingToUInt64(static_cast<long long>(
+                duckdb_hugeint_to_double(static_cast<duckdb_hugeint*>(rawData)[row])), clamped);
+        case DUCKDB_TYPE_BOOLEAN:
+            return static_cast<bool*>(rawData)[row] ? 1ULL : 0ULL;
+        default:
+            clamped = true;
+            return 0ULL;
         }
     }
 
@@ -385,7 +520,8 @@ namespace dbadapters
     }
 
     // 按 schema 列主序绑定一个 chunk 的所有行到已分配的记录。
-    void BindChunkToRecords(duckdb_data_chunk chunk, const TableSchema* schema, void** records)
+    void BindChunkToRecords(duckdb_data_chunk chunk, const TableSchema* schema, void** records,
+                            int& clampedCount)
     {
         idx_t rowCount = duckdb_data_chunk_get_size(chunk);
         for (int fieldIndex = 0; fieldIndex < schema->fieldCount; ++fieldIndex)
@@ -420,13 +556,30 @@ namespace dbadapters
                     *reinterpret_cast<double*>(dest) =
                         ReadCellAsDouble(sourceType, rawData, row, decimalWidth, decimalScale);
                     break;
-                case FieldType::Int64:
-                    *reinterpret_cast<long long*>(dest) =
-                        ReadCellAsInt64(sourceType, rawData, row, decimalWidth, decimalScale);
+                case FieldType::UInt64:
+                {
+                    bool clampedFromSource = false;
+                    *reinterpret_cast<uint64_t*>(dest) = ReadCellAsUInt64(
+                        sourceType, rawData, row, decimalWidth, decimalScale, clampedFromSource);
+                    if (clampedFromSource)
+                    {
+                        ++clampedCount;
+                    }
                     break;
-                case FieldType::Int:
-                    *reinterpret_cast<int*>(dest) =
-                        ReadCellAsInt32(sourceType, rawData, row, decimalWidth, decimalScale);
+                }
+                case FieldType::Int8:
+                case FieldType::UInt8:
+                case FieldType::Int16:
+                case FieldType::UInt16:
+                case FieldType::Int32:
+                case FieldType::UInt32:
+                case FieldType::Int64:
+                    if (!TryWriteIntegerFromSigned(
+                            ReadCellAsInt64(sourceType, rawData, row, decimalWidth, decimalScale),
+                            field.type, dest))
+                    {
+                        ++clampedCount;
+                    }
                     break;
                 case FieldType::Bool:
                     *reinterpret_cast<bool*>(dest) =
@@ -453,8 +606,14 @@ namespace dbadapters
             sql << f.name << " ";
             switch (f.type)
             {
-            case FieldType::Int:    sql << "INTEGER"; break;
+            case FieldType::Int8:   sql << "TINYINT"; break;
+            case FieldType::UInt8:  sql << "UTINYINT"; break;
+            case FieldType::Int16:  sql << "SMALLINT"; break;
+            case FieldType::UInt16: sql << "USMALLINT"; break;
+            case FieldType::Int32:  sql << "INTEGER"; break;
+            case FieldType::UInt32: sql << "UINTEGER"; break;
             case FieldType::Int64:  sql << "BIGINT"; break;
+            case FieldType::UInt64: sql << "UBIGINT"; break;
             case FieldType::Double: sql << "DOUBLE"; break;
             case FieldType::Char:   sql << "VARCHAR"; break;
             case FieldType::Bool:   sql << "BOOLEAN"; break;
@@ -760,13 +919,7 @@ void DuckdbWrapper::SelectAll(const TableSchema* schema, void* recordsList,
         return;
     }
 
-    idx_t rowCount = duckdb_row_count(&result);
-    for (idx_t row = 0; row < rowCount; ++row)
-    {
-        void* record = factory.Allocate();
-        ReadRow(result, row, schema, record);
-        factory.PushBack(recordsList, record);
-    }
+    ReadResultRows(result, schema, recordsList, factory);
     duckdb_destroy_result(&result);
 }
 void DuckdbWrapper::SelectWithSql(const char* sql, const TableSchema* schema,
@@ -787,13 +940,7 @@ void DuckdbWrapper::SelectWithSql(const char* sql, const TableSchema* schema,
         return;
     }
 
-    idx_t rowCount = duckdb_row_count(&result);
-    for (idx_t row = 0; row < rowCount; ++row)
-    {
-        void* record = factory.Allocate();
-        ReadRow(result, row, schema, record);
-        factory.PushBack(recordsList, record);
-    }
+    ReadResultRows(result, schema, recordsList, factory);
     duckdb_destroy_result(&result);
 }
 
@@ -814,6 +961,8 @@ std::string DuckdbWrapper::SelectWithSqlVectorized(const char* sql, const TableS
         return errorMessage;
     }
 
+    int clampedCount = 0;
+    idx_t totalRowCount = 0;
     while (true)
     {
         duckdb_data_chunk chunk = duckdb_fetch_chunk(result);
@@ -822,6 +971,7 @@ std::string DuckdbWrapper::SelectWithSqlVectorized(const char* sql, const TableS
             break;
         }
         idx_t chunkRowCount = duckdb_data_chunk_get_size(chunk);
+        totalRowCount += chunkRowCount;
         if (chunkRowCount > 0)
         {
             std::vector<void*> rowRecords(chunkRowCount);
@@ -829,7 +979,7 @@ std::string DuckdbWrapper::SelectWithSqlVectorized(const char* sql, const TableS
             {
                 rowRecords[row] = factory.Allocate();
             }
-            BindChunkToRecords(chunk, schema, rowRecords.data());
+            BindChunkToRecords(chunk, schema, rowRecords.data(), clampedCount);
             for (idx_t row = 0; row < chunkRowCount; ++row)
             {
                 factory.PushBack(recordsList, rowRecords[row]);
@@ -837,6 +987,7 @@ std::string DuckdbWrapper::SelectWithSqlVectorized(const char* sql, const TableS
         }
         duckdb_destroy_data_chunk(&chunk);
     }
+    LogClampedCells(schema, clampedCount, static_cast<int>(totalRowCount));
     duckdb_destroy_result(&result);
     return std::string();
 }
