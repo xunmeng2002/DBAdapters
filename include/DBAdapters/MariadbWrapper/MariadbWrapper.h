@@ -35,9 +35,9 @@ public:
 
 private:
     struct Impl;
-    std::unique_ptr<Impl> m_Impl;
-    std::string m_Host;
-    std::string m_User;
-    std::string m_Passwd;
+    std::unique_ptr<Impl> impl_;
+    std::string host_;
+    std::string user_;
+    std::string passwd_;
 };
 }

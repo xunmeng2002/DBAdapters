@@ -209,7 +209,7 @@ using namespace Spark::Core;
 // 记录结构体：字段的内存布局与 TableSchema 的 FieldDescriptor 一一对应
 struct Account
 {
-    static constexpr unsigned int TableID = 0x0001;
+    static constexpr unsigned int TableId = 0x0001;
     char AccountId[32];
     char AccountName[64];
     int  AccountType;
@@ -386,7 +386,7 @@ class DemoSchemaRegistry : public SchemaRegistry
 public:
     const TableSchema* GetSchema(unsigned int tableID) const override
     {
-        return tableID == Account::TableID ? &Account::GetSchema() : nullptr;
+        return tableID == Account::TableId ? &Account::GetSchema() : nullptr;
     }
     const TableSchema* const* GetAllSchemas() const override
     {
@@ -424,7 +424,7 @@ int main()
     Account record;
     std::memset(&record, 0, sizeof(record));
     std::strcpy(record.AccountId, "A002");
-    writer.OnRecordInsert(Account::TableID, &record);   // 入队 → 后台线程异步落库
+    writer.OnRecordInsert(Account::TableId, &record);   // 入队 → 后台线程异步落库
 
     writer.Stop();
     writer.Join();

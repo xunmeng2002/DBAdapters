@@ -270,12 +270,12 @@ struct MariadbWrapper::Impl
 
 
 MariadbWrapper::MariadbWrapper(const std::string& host, const std::string& user, const std::string& passwd)
-    : m_Host(host), m_User(user), m_Passwd(passwd), m_Impl(nullptr)
+    : host_(host), user_(user), passwd_(passwd), impl_(nullptr)
 {
     // 驱动装载失败（客户端动态库缺失）抛异常；记录后继续抛出，保持调用方原有的失败感知
     try
     {
-        m_Impl = std::make_unique<Impl>();
+        impl_ = std::make_unique<Impl>();
     }
     catch (const std::exception& e)
     {
@@ -298,30 +298,30 @@ bool MariadbWrapper::Connect()
     // 直达 std::terminate，故在此转为返回 false，交由写库线程按连接失败重试并上报
     try
     {
-        m_Impl->m_DBConnection.reset(
-            m_Impl->m_Driver->connect(m_Host, m_User, m_Passwd));
+        impl_->m_DBConnection.reset(
+            impl_->m_Driver->connect(host_, user_, passwd_));
     }
     catch (const std::exception& e)
     {
-        WriteLog(LogLevel::Error, "MariadbWrapper: Connect failed. Host:%s, Message:%s", m_Host.c_str(), e.what());
+        WriteLog(LogLevel::Error, "MariadbWrapper: Connect failed. Host:%s, Message:%s", host_.c_str(), e.what());
         return false;
     }
-    return m_Impl->m_DBConnection != nullptr;
+    return impl_->m_DBConnection != nullptr;
 }
 
 void MariadbWrapper::DisConnect()
 {
-    m_Impl->DisConnect();
+    impl_->DisConnect();
 }
 
 void MariadbWrapper::Exec(const char* sql)
 {
-    if (!m_Impl->m_Statement)
+    if (!impl_->m_Statement)
     {
-        m_Impl->m_Statement.reset(
-            m_Impl->m_DBConnection->createStatement());
+        impl_->m_Statement.reset(
+            impl_->m_DBConnection->createStatement());
     }
-    m_Impl->m_Statement->executeUpdate(sql);
+    impl_->m_Statement->executeUpdate(sql);
 }
 
 void MariadbWrapper::CreateTable(const TableSchema* schema)
@@ -367,7 +367,7 @@ void MariadbWrapper::Insert(const TableSchema* schema, const void* record)
 {
     std::string sql = MakeInsertSql(schema);
     auto pstmt = std::unique_ptr<sql::PreparedStatement, SqlPreparedStatementDeleter>(
-        m_Impl->m_DBConnection->prepareStatement(sql));
+        impl_->m_DBConnection->prepareStatement(sql));
     for (int i = 0; i < schema->fieldCount; ++i)
         BindField(pstmt.get(), i + 1, schema->fields[i], record);
     pstmt->executeUpdate();
@@ -385,7 +385,7 @@ void MariadbWrapper::Update(const TableSchema* schema, const void* record)
 {
     std::string sql = MakeUpdateSql(schema);
     auto pstmt = std::unique_ptr<sql::PreparedStatement, SqlPreparedStatementDeleter>(
-        m_Impl->m_DBConnection->prepareStatement(sql));
+        impl_->m_DBConnection->prepareStatement(sql));
     int paramIndex = 1;
     for (int i = 0; i < schema->fieldCount; ++i)
         BindField(pstmt.get(), paramIndex++, schema->fields[i], record);
@@ -402,7 +402,7 @@ void MariadbWrapper::Delete(const TableSchema* schema, const void* record,
 {
     std::string sql = MakeDeleteSql(schema, keyFieldIndices, keyFieldCount);
     auto pstmt = std::unique_ptr<sql::PreparedStatement, SqlPreparedStatementDeleter>(
-        m_Impl->m_DBConnection->prepareStatement(sql));
+        impl_->m_DBConnection->prepareStatement(sql));
     for (int i = 0; i < keyFieldCount; ++i)
         BindField(pstmt.get(), i + 1, schema->fields[keyFieldIndices[i]], record);
     pstmt->executeUpdate();
@@ -415,26 +415,26 @@ void MariadbWrapper::SelectAll(const TableSchema* schema, void* recordsList,
     sql += schema->tableName;
     sql += "`;";
 
-    if (!m_Impl->m_Statement)
+    if (!impl_->m_Statement)
     {
-        m_Impl->m_Statement.reset(
-            m_Impl->m_DBConnection->createStatement());
+        impl_->m_Statement.reset(
+            impl_->m_DBConnection->createStatement());
     }
     auto result = std::unique_ptr<sql::ResultSet>(
-        m_Impl->m_Statement->executeQuery(sql));
+        impl_->m_Statement->executeQuery(sql));
     ReadResultRows(result.get(), schema, recordsList, factory);
 }
 
 void MariadbWrapper::SelectWithSql(const char* sql, const TableSchema* schema,
                                      void* recordsList, const RecordFactory& factory)
 {
-    if (!m_Impl->m_Statement)
+    if (!impl_->m_Statement)
     {
-        m_Impl->m_Statement.reset(
-            m_Impl->m_DBConnection->createStatement());
+        impl_->m_Statement.reset(
+            impl_->m_DBConnection->createStatement());
     }
     auto result = std::unique_ptr<sql::ResultSet>(
-        m_Impl->m_Statement->executeQuery(sql));
+        impl_->m_Statement->executeQuery(sql));
     ReadResultRows(result.get(), schema, recordsList, factory);
 }
 }

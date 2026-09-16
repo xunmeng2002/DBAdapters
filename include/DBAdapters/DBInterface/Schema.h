@@ -40,7 +40,7 @@ struct RecordFactory
 
 struct IndexDefinition
 {
-    unsigned int    indexID;
+    unsigned int    indexId;
     const int*      fieldIndices;
     int             fieldCount;
 };

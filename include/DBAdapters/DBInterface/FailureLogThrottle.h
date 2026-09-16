@@ -12,7 +12,7 @@ namespace DbAdapters
         static constexpr int kDefaultReportInterval = 1000;
 
         explicit FailureLogThrottle(int reportInterval = kDefaultReportInterval)
-            : m_ReportInterval(reportInterval > 0 ? reportInterval : kDefaultReportInterval)
+            : reportInterval_(reportInterval > 0 ? reportInterval : kDefaultReportInterval)
         {
         }
         FailureLogThrottle(const FailureLogThrottle&) = delete;
@@ -21,18 +21,18 @@ namespace DbAdapters
         // 返回值：0 表示本次节流不上报；>0 表示应上报，其值为累计失败次数
         int RegisterFailure()
         {
-            ++m_FailureCount;
-            if (m_FailureCount != 1 && m_FailureCount % m_ReportInterval != 0)
+            ++failureCount_;
+            if (failureCount_ != 1 && failureCount_ % reportInterval_ != 0)
             {
                 return 0;
             }
-            return m_FailureCount;
+            return failureCount_;
         }
-        int FailureCount() const { return m_FailureCount; }
+        int FailureCount() const { return failureCount_; }
 
     private:
-        int m_ReportInterval;
-        int m_FailureCount = 0;
+        int reportInterval_;
+        int failureCount_ = 0;
     };
 
     // 上报一次语句失败：含后端名、操作名、表名与后端错误文本，累计失败次数由本函数追加。

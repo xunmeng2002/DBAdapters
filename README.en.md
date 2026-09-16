@@ -209,7 +209,7 @@ using namespace Spark::Core;
 // Record struct: field memory layout must match the FieldDescriptors of the TableSchema
 struct Account
 {
-    static constexpr unsigned int TableID = 0x0001;
+    static constexpr unsigned int TableId = 0x0001;
     char AccountId[32];
     char AccountName[64];
     int  AccountType;
@@ -386,7 +386,7 @@ class DemoSchemaRegistry : public SchemaRegistry
 public:
     const TableSchema* GetSchema(unsigned int tableID) const override
     {
-        return tableID == Account::TableID ? &Account::GetSchema() : nullptr;
+        return tableID == Account::TableId ? &Account::GetSchema() : nullptr;
     }
     const TableSchema* const* GetAllSchemas() const override
     {
@@ -424,7 +424,7 @@ int main()
     Account record;
     std::memset(&record, 0, sizeof(record));
     std::strcpy(record.AccountId, "A002");
-    writer.OnRecordInsert(Account::TableID, &record);   // Enqueued → persisted by the background thread
+    writer.OnRecordInsert(Account::TableId, &record);   // Enqueued → persisted by the background thread
 
     writer.Stop();
     writer.Join();

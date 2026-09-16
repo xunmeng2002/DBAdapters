@@ -194,24 +194,24 @@ struct SqliteWrapper::Impl
 };
 
 SqliteWrapper::SqliteWrapper(const std::string& dbName)
-	: m_Impl(new Impl)
+	: impl_(new Impl)
 {
-	int rc = sqlite3_open(dbName.c_str(), &m_Impl->db);
+	int rc = sqlite3_open(dbName.c_str(), &impl_->db);
 	if (rc != SQLITE_OK)
 	{
 		// open 失败时 SQLite 仍会返回句柄（仅 SQLITE_NOMEM 下可能为 nullptr），错误文本须在其关闭前取出
-		const char* errorDetail = m_Impl->db != nullptr ? sqlite3_errmsg(m_Impl->db) : sqlite3_errstr(rc);
+		const char* errorDetail = impl_->db != nullptr ? sqlite3_errmsg(impl_->db) : sqlite3_errstr(rc);
 		WriteLog(LogLevel::Error, "SqliteWrapper: Open database failed. Path:%s, ReturnCode:%d, Error:%s", dbName.c_str(), rc, errorDetail);
-		if (m_Impl->db != nullptr)
+		if (impl_->db != nullptr)
 		{
-			sqlite3_close(m_Impl->db);
+			sqlite3_close(impl_->db);
 		}
-		m_Impl->db = nullptr;
+		impl_->db = nullptr;
 		return;
 	}
-	sqlite3_exec(m_Impl->db, "PRAGMA encoding = 'UTF-8';", nullptr, nullptr, nullptr);
+	sqlite3_exec(impl_->db, "PRAGMA encoding = 'UTF-8';", nullptr, nullptr, nullptr);
 
-	StatementGuard stmt(m_Impl->db, "PRAGMA encoding;");
+	StatementGuard stmt(impl_->db, "PRAGMA encoding;");
 	if (stmt.IsValid() && stmt.Step() == SQLITE_ROW)
 	{
 		const unsigned char* enc = sqlite3_column_text(stmt.Get(), 0);
@@ -221,31 +221,31 @@ SqliteWrapper::SqliteWrapper(const std::string& dbName)
 SqliteWrapper::~SqliteWrapper()
 {
 	DisConnect();
-	delete m_Impl;
+	delete impl_;
 }
 
 bool SqliteWrapper::Connect()
 {
-	return m_Impl->db != nullptr;
+	return impl_->db != nullptr;
 }
 void SqliteWrapper::DisConnect()
 {
-	if (m_Impl->db)
+	if (impl_->db)
 	{
-		sqlite3_close(m_Impl->db);
-		m_Impl->db = nullptr;
+		sqlite3_close(impl_->db);
+		impl_->db = nullptr;
 	}
 }
 void SqliteWrapper::Exec(const char* sql)
 {
-	if (m_Impl->db == nullptr)
+	if (impl_->db == nullptr)
 	{
 		// 句柄为空时所有语句都会静默失效（含建表与批量写的事务控制），必须显式记录
 		WriteLog(LogLevel::Error, "SqliteWrapper: EXEC skipped, database is not open. Sql:%s", sql);
 		return;
 	}
 	char* errMsg = nullptr;
-	const int rc = sqlite3_exec(m_Impl->db, sql, nullptr, nullptr, &errMsg);
+	const int rc = sqlite3_exec(impl_->db, sql, nullptr, nullptr, &errMsg);
 	if (rc != SQLITE_OK)
 	{
 		WriteLog(LogLevel::Error, "SqliteWrapper: EXEC failed. ReturnCode:%d, Error:%s, Sql:%s",
@@ -348,16 +348,16 @@ void SqliteWrapper::Insert(const TableSchema* schema, const void* record)
 	}
 	sql << ");";
 
-	if (m_Impl->db == nullptr)
+	if (impl_->db == nullptr)
 	{
-		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "INSERT", schema->tableName, "database is not open");
+		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "INSERT", schema->tableName, "database is not open");
 		return;
 	}
-	StatementGuard stmt(m_Impl->db, sql.str().c_str());
+	StatementGuard stmt(impl_->db, sql.str().c_str());
 	if (!stmt.IsValid())
 	{
-		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "INSERT", schema->tableName,
-			sqlite3_errmsg(m_Impl->db));
+		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "INSERT", schema->tableName,
+			sqlite3_errmsg(impl_->db));
 		return;
 	}
 	int clampedCount = 0;
@@ -365,21 +365,21 @@ void SqliteWrapper::Insert(const TableSchema* schema, const void* record)
 	const int rc = stmt.Step();
 	if (rc != SQLITE_DONE)
 	{
-		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "INSERT", schema->tableName,
-			sqlite3_errmsg(m_Impl->db));
+		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "INSERT", schema->tableName,
+			sqlite3_errmsg(impl_->db));
 	}
 	LogClampedCells("INSERT", schema, clampedCount, schema->fieldCount);
 }
 void SqliteWrapper::BatchInsert(const TableSchema* schema, const void* const* records, int count)
 {
-	const int failureCountBeforeBatch = m_Impl->failureLogThrottle.FailureCount();
+	const int failureCountBeforeBatch = impl_->failureLogThrottle.FailureCount();
 	Exec("BEGIN;");
 	for (int i = 0; i < count; ++i)
 	{
 		Insert(schema, records[i]);
 	}
 	Exec("COMMIT;");
-	const int failedRecordCount = m_Impl->failureLogThrottle.FailureCount() - failureCountBeforeBatch;
+	const int failedRecordCount = impl_->failureLogThrottle.FailureCount() - failureCountBeforeBatch;
 	if (failedRecordCount > 0)
 	{
 		// 明细由 Insert 的节流上报给出，此处补充整批的失败规模（每条记录一次失败会被节流掩盖总量）
@@ -405,16 +405,16 @@ void SqliteWrapper::Update(const TableSchema* schema, const void* record)
 	}
 	sql << ";";
 
-	if (m_Impl->db == nullptr)
+	if (impl_->db == nullptr)
 	{
-		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "UPDATE", schema->tableName, "database is not open");
+		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "UPDATE", schema->tableName, "database is not open");
 		return;
 	}
-	StatementGuard stmt(m_Impl->db, sql.str().c_str());
+	StatementGuard stmt(impl_->db, sql.str().c_str());
 	if (!stmt.IsValid())
 	{
-		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "UPDATE", schema->tableName,
-			sqlite3_errmsg(m_Impl->db));
+		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "UPDATE", schema->tableName,
+			sqlite3_errmsg(impl_->db));
 		return;
 	}
 	int clampedCount = 0;
@@ -432,8 +432,8 @@ void SqliteWrapper::Update(const TableSchema* schema, const void* record)
 	const int rc = stmt.Step();
 	if (rc != SQLITE_DONE)
 	{
-		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "UPDATE", schema->tableName,
-			sqlite3_errmsg(m_Impl->db));
+		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "UPDATE", schema->tableName,
+			sqlite3_errmsg(impl_->db));
 	}
 	LogClampedCells("UPDATE", schema, clampedCount, schema->fieldCount + schema->primaryKeyCount);
 }
@@ -448,16 +448,16 @@ void SqliteWrapper::Delete(const TableSchema* schema, const void* record, const 
 	}
 	sql << ";";
 
-	if (m_Impl->db == nullptr)
+	if (impl_->db == nullptr)
 	{
-		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "DELETE", schema->tableName, "database is not open");
+		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "DELETE", schema->tableName, "database is not open");
 		return;
 	}
-	StatementGuard stmt(m_Impl->db, sql.str().c_str());
+	StatementGuard stmt(impl_->db, sql.str().c_str());
 	if (!stmt.IsValid())
 	{
-		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "DELETE", schema->tableName,
-			sqlite3_errmsg(m_Impl->db));
+		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "DELETE", schema->tableName,
+			sqlite3_errmsg(impl_->db));
 		return;
 	}
 	int clampedCount = 0;
@@ -465,8 +465,8 @@ void SqliteWrapper::Delete(const TableSchema* schema, const void* record, const 
 	const int rc = stmt.Step();
 	if (rc != SQLITE_DONE)
 	{
-		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "DELETE", schema->tableName,
-			sqlite3_errmsg(m_Impl->db));
+		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "DELETE", schema->tableName,
+			sqlite3_errmsg(impl_->db));
 	}
 	LogClampedCells("DELETE", schema, clampedCount, keyFieldCount);
 }
@@ -477,16 +477,16 @@ void SqliteWrapper::SelectAll(const TableSchema* schema, void* recordsList, cons
 	sql += schema->tableName;
 	sql += ";";
 
-	if (m_Impl->db == nullptr)
+	if (impl_->db == nullptr)
 	{
-		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "SELECT", schema->tableName, "database is not open");
+		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "SELECT", schema->tableName, "database is not open");
 		return;
 	}
-	StatementGuard stmt(m_Impl->db, sql.c_str());
+	StatementGuard stmt(impl_->db, sql.c_str());
 	if (!stmt.IsValid())
 	{
-		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "SELECT", schema->tableName,
-			sqlite3_errmsg(m_Impl->db));
+		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "SELECT", schema->tableName,
+			sqlite3_errmsg(impl_->db));
 		return;
 	}
 
@@ -494,21 +494,21 @@ void SqliteWrapper::SelectAll(const TableSchema* schema, void* recordsList, cons
 	if (rc != SQLITE_DONE)
 	{
 		// 中途出错时旧实现只是静默结束循环，调用方会把半份结果当成完整结果
-		LogOperationFailure(m_Impl->failureLogThrottle, "SqliteWrapper", "SELECT", schema->tableName,
-			sqlite3_errmsg(m_Impl->db));
+		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "SELECT", schema->tableName,
+			sqlite3_errmsg(impl_->db));
 	}
 }
 void SqliteWrapper::SelectWithSql(const char* sql, const TableSchema* schema, void* recordsList, const RecordFactory& factory)
 {
-	if (m_Impl->db == nullptr)
+	if (impl_->db == nullptr)
 	{
 		WriteLog(LogLevel::Error, "SqliteWrapper: SELECT skipped, database is not open. Sql:%s", sql);
 		return;
 	}
-	StatementGuard stmt(m_Impl->db, sql);
+	StatementGuard stmt(impl_->db, sql);
 	if (!stmt.IsValid())
 	{
-		WriteLog(LogLevel::Error, "SqliteWrapper: SELECT prepare failed. Error:%s, Sql:%s", sqlite3_errmsg(m_Impl->db), sql);
+		WriteLog(LogLevel::Error, "SqliteWrapper: SELECT prepare failed. Error:%s, Sql:%s", sqlite3_errmsg(impl_->db), sql);
 		return;
 	}
 
@@ -516,7 +516,7 @@ void SqliteWrapper::SelectWithSql(const char* sql, const TableSchema* schema, vo
 	if (rc != SQLITE_DONE)
 	{
 		WriteLog(LogLevel::Error, "SqliteWrapper: SELECT failed. ReturnCode:%d, Error:%s, Sql:%s",
-			rc, sqlite3_errmsg(m_Impl->db), sql);
+			rc, sqlite3_errmsg(impl_->db), sql);
 	}
 }
 }

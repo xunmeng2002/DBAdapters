@@ -694,54 +694,54 @@ struct DuckdbWrapper::Impl
 };
 
 DuckdbWrapper::DuckdbWrapper(const std::string& dbName)
-    : m_Impl(new Impl)
+    : impl_(new Impl)
 {
-    if (duckdb_open(dbName.c_str(), &m_Impl->database) != DuckDBSuccess)
+    if (duckdb_open(dbName.c_str(), &impl_->database) != DuckDBSuccess)
     {
         WriteLog(LogLevel::Error, "DuckdbWrapper: Open database failed. Path:%s", dbName.c_str());
-        m_Impl->database = nullptr;
+        impl_->database = nullptr;
         return;
     }
-    if (duckdb_connect(m_Impl->database, &m_Impl->connection) != DuckDBSuccess)
+    if (duckdb_connect(impl_->database, &impl_->connection) != DuckDBSuccess)
     {
         // 连接失败后连接句柄为空，后续所有语句都会静默失效，必须显式记录
         WriteLog(LogLevel::Error, "DuckdbWrapper: Connect failed. Path:%s", dbName.c_str());
-        m_Impl->connection = nullptr;
+        impl_->connection = nullptr;
     }
 }
 DuckdbWrapper::~DuckdbWrapper()
 {
     DisConnect();
-    delete m_Impl;
+    delete impl_;
 }
 
 bool DuckdbWrapper::Connect()
 {
-    return m_Impl->connection != nullptr;
+    return impl_->connection != nullptr;
 }
 void DuckdbWrapper::DisConnect()
 {
-    if (m_Impl->connection)
+    if (impl_->connection)
     {
-        duckdb_disconnect(&m_Impl->connection);
-        m_Impl->connection = nullptr;
+        duckdb_disconnect(&impl_->connection);
+        impl_->connection = nullptr;
     }
-    if (m_Impl->database)
+    if (impl_->database)
     {
-        duckdb_close(&m_Impl->database);
-        m_Impl->database = nullptr;
+        duckdb_close(&impl_->database);
+        impl_->database = nullptr;
     }
 }
 void DuckdbWrapper::Exec(const char* sql)
 {
-    if (m_Impl->connection == nullptr)
+    if (impl_->connection == nullptr)
     {
         // 连接为空时所有语句都会静默失效（含建表与批量写的事务控制），必须显式记录
         WriteLog(LogLevel::Error, "DuckdbWrapper: EXEC skipped, database is not open. Sql:%s", sql);
         return;
     }
     duckdb_result result;
-    if (duckdb_query(m_Impl->connection, sql, &result) != DuckDBSuccess)
+    if (duckdb_query(impl_->connection, sql, &result) != DuckDBSuccess)
     {
         const char* errorDetail = duckdb_result_error(&result);
         WriteLog(LogLevel::Error, "DuckdbWrapper: EXEC failed. Error:%s, Sql:%s",
@@ -794,16 +794,16 @@ void DuckdbWrapper::TruncateTables(const TableSchema* const* schemas, int count)
 void DuckdbWrapper::Insert(const TableSchema* schema, const void* record)
 {
     std::string sql = MakeInsertSql(schema);
-    if (m_Impl->connection == nullptr)
+    if (impl_->connection == nullptr)
     {
-        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "INSERT", schema->tableName, "database is not open");
+        LogOperationFailure(impl_->failureLogThrottle, "DuckdbWrapper", "INSERT", schema->tableName, "database is not open");
         return;
     }
-    PreparedStatement stmt(m_Impl->connection, sql.c_str());
+    PreparedStatement stmt(impl_->connection, sql.c_str());
     if (!stmt.IsValid())
     {
         const char* prepareError = stmt.GetPrepareError();
-        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "INSERT", schema->tableName,
+        LogOperationFailure(impl_->failureLogThrottle, "DuckdbWrapper", "INSERT", schema->tableName,
             prepareError != nullptr ? prepareError : "prepare failed");
         return;
     }
@@ -811,21 +811,21 @@ void DuckdbWrapper::Insert(const TableSchema* schema, const void* record)
     duckdb_result result;
     if (duckdb_execute_prepared(stmt.Get(), &result) != DuckDBSuccess)
     {
-        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "INSERT", schema->tableName,
+        LogOperationFailure(impl_->failureLogThrottle, "DuckdbWrapper", "INSERT", schema->tableName,
             duckdb_result_error(&result));
     }
     duckdb_destroy_result(&result);
 }
 void DuckdbWrapper::BatchInsert(const TableSchema* schema, const void* const* records, int count)
 {
-    const int failureCountBeforeBatch = m_Impl->failureLogThrottle.FailureCount();
+    const int failureCountBeforeBatch = impl_->failureLogThrottle.FailureCount();
     Exec("BEGIN;");
     for (int i = 0; i < count; ++i)
     {
         Insert(schema, records[i]);
     }
     Exec("COMMIT;");
-    const int failedRecordCount = m_Impl->failureLogThrottle.FailureCount() - failureCountBeforeBatch;
+    const int failedRecordCount = impl_->failureLogThrottle.FailureCount() - failureCountBeforeBatch;
     if (failedRecordCount > 0)
     {
         // 明细由 Insert 的节流上报给出，此处补充整批的失败规模（每条记录一次失败会被节流掩盖总量）
@@ -836,16 +836,16 @@ void DuckdbWrapper::BatchInsert(const TableSchema* schema, const void* const* re
 void DuckdbWrapper::Update(const TableSchema* schema, const void* record)
 {
     std::string sql = MakeUpdateSql(schema);
-    if (m_Impl->connection == nullptr)
+    if (impl_->connection == nullptr)
     {
-        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "UPDATE", schema->tableName, "database is not open");
+        LogOperationFailure(impl_->failureLogThrottle, "DuckdbWrapper", "UPDATE", schema->tableName, "database is not open");
         return;
     }
-    PreparedStatement stmt(m_Impl->connection, sql.c_str());
+    PreparedStatement stmt(impl_->connection, sql.c_str());
     if (!stmt.IsValid())
     {
         const char* prepareError = stmt.GetPrepareError();
-        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "UPDATE", schema->tableName,
+        LogOperationFailure(impl_->failureLogThrottle, "DuckdbWrapper", "UPDATE", schema->tableName,
             prepareError != nullptr ? prepareError : "prepare failed");
         return;
     }
@@ -865,7 +865,7 @@ void DuckdbWrapper::Update(const TableSchema* schema, const void* record)
     duckdb_result result;
     if (duckdb_execute_prepared(stmt.Get(), &result) != DuckDBSuccess)
     {
-        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "UPDATE", schema->tableName,
+        LogOperationFailure(impl_->failureLogThrottle, "DuckdbWrapper", "UPDATE", schema->tableName,
             duckdb_result_error(&result));
     }
     duckdb_destroy_result(&result);
@@ -874,16 +874,16 @@ void DuckdbWrapper::Delete(const TableSchema* schema, const void* record,
                            const int* keyFieldIndices, int keyFieldCount)
 {
     std::string sql = MakeDeleteSql(schema, keyFieldIndices, keyFieldCount);
-    if (m_Impl->connection == nullptr)
+    if (impl_->connection == nullptr)
     {
-        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "DELETE", schema->tableName, "database is not open");
+        LogOperationFailure(impl_->failureLogThrottle, "DuckdbWrapper", "DELETE", schema->tableName, "database is not open");
         return;
     }
-    PreparedStatement stmt(m_Impl->connection, sql.c_str());
+    PreparedStatement stmt(impl_->connection, sql.c_str());
     if (!stmt.IsValid())
     {
         const char* prepareError = stmt.GetPrepareError();
-        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "DELETE", schema->tableName,
+        LogOperationFailure(impl_->failureLogThrottle, "DuckdbWrapper", "DELETE", schema->tableName,
             prepareError != nullptr ? prepareError : "prepare failed");
         return;
     }
@@ -892,7 +892,7 @@ void DuckdbWrapper::Delete(const TableSchema* schema, const void* record,
     duckdb_result result;
     if (duckdb_execute_prepared(stmt.Get(), &result) != DuckDBSuccess)
     {
-        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "DELETE", schema->tableName,
+        LogOperationFailure(impl_->failureLogThrottle, "DuckdbWrapper", "DELETE", schema->tableName,
             duckdb_result_error(&result));
     }
     duckdb_destroy_result(&result);
@@ -905,15 +905,15 @@ void DuckdbWrapper::SelectAll(const TableSchema* schema, void* recordsList,
     sql += schema->tableName;
     sql += ";";
 
-    if (m_Impl->connection == nullptr)
+    if (impl_->connection == nullptr)
     {
-        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "SELECT", schema->tableName, "database is not open");
+        LogOperationFailure(impl_->failureLogThrottle, "DuckdbWrapper", "SELECT", schema->tableName, "database is not open");
         return;
     }
     duckdb_result result;
-    if (duckdb_query(m_Impl->connection, sql.c_str(), &result) != DuckDBSuccess)
+    if (duckdb_query(impl_->connection, sql.c_str(), &result) != DuckDBSuccess)
     {
-        LogOperationFailure(m_Impl->failureLogThrottle, "DuckdbWrapper", "SELECT", schema->tableName,
+        LogOperationFailure(impl_->failureLogThrottle, "DuckdbWrapper", "SELECT", schema->tableName,
             duckdb_result_error(&result));
         duckdb_destroy_result(&result);
         return;
@@ -925,13 +925,13 @@ void DuckdbWrapper::SelectAll(const TableSchema* schema, void* recordsList,
 void DuckdbWrapper::SelectWithSql(const char* sql, const TableSchema* schema,
                                   void* recordsList, const RecordFactory& factory)
 {
-    if (m_Impl->connection == nullptr)
+    if (impl_->connection == nullptr)
     {
         WriteLog(LogLevel::Error, "DuckdbWrapper: SELECT skipped, database is not open. Sql:%s", sql);
         return;
     }
     duckdb_result result;
-    if (duckdb_query(m_Impl->connection, sql, &result) != DuckDBSuccess)
+    if (duckdb_query(impl_->connection, sql, &result) != DuckDBSuccess)
     {
         const char* errorDetail = duckdb_result_error(&result);
         WriteLog(LogLevel::Error, "DuckdbWrapper: SELECT failed. Error:%s, Sql:%s",
@@ -949,7 +949,7 @@ std::string DuckdbWrapper::SelectWithSqlVectorized(const char* sql, const TableS
                                                    const RecordFactory& factory)
 {
     duckdb_result result;
-    if (duckdb_query(m_Impl->connection, sql, &result) != DuckDBSuccess)
+    if (duckdb_query(impl_->connection, sql, &result) != DuckDBSuccess)
     {
         std::string errorMessage;
         const char* error = duckdb_result_error(&result);

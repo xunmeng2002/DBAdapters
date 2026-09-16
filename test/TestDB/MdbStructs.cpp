@@ -5,7 +5,7 @@
 
 using namespace Spark;
 using namespace DbAdapters;
-namespace mdb
+namespace Mdb
 {
 	thread_local char t_MdbDataStringBuffer[10240];
 

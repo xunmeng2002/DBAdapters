@@ -35,7 +35,7 @@ bool AsyncDBWriter::Connect()
 	{
 		if (m_DB->Connect())
 		{
-			m_Connected = true;
+			connected_ = true;
 			WriteLog(LogLevel::Info, "AsyncDBWriter: DB connected.");
 			if (dbSubscriber_ != nullptr)
 			{
@@ -54,7 +54,7 @@ bool AsyncDBWriter::Connect()
 }
 void AsyncDBWriter::DisConnect()
 {
-	m_Connected = false;
+	connected_ = false;
 	if (dbSubscriber_ != nullptr)
 	{
 		dbSubscriber_->OnDBDisConnected();
@@ -81,7 +81,7 @@ void AsyncDBWriter::OnTableOp(DbOperateType op)
 {
 	DbOperate* dbOperate = AllocateDBOperate();
 	dbOperate->Operate = op;
-	dbOperate->TableID = 0;
+	dbOperate->TableId = 0;
 	dbOperate->Record = nullptr;
 	AddDBOperate(dbOperate);
 }
@@ -90,7 +90,7 @@ void AsyncDBWriter::OnRecordInsert(unsigned int tableID, void* record)
 {
 	DbOperate* dbOperate = AllocateDBOperate();
 	dbOperate->Operate = DbOperateType::Insert;
-	dbOperate->TableID = tableID;
+	dbOperate->TableId = tableID;
 	dbOperate->Record = record;
 	AddDBOperate(dbOperate);
 }
@@ -99,7 +99,7 @@ void AsyncDBWriter::OnRecordBatchInsert(unsigned int tableID, std::vector<const 
 {
 	DbOperate* dbOperate = AllocateDBOperate();
 	dbOperate->Operate = DbOperateType::BatchInsert;
-	dbOperate->TableID = tableID;
+	dbOperate->TableId = tableID;
 	dbOperate->Record = nullptr;
 
 	auto& batch = static_cast<DBOperateImpl*>(dbOperate)->GetBatchData();
@@ -112,17 +112,17 @@ void AsyncDBWriter::OnRecordErase(unsigned int tableID, void* record)
 {
 	DbOperate* dbOperate = AllocateDBOperate();
 	dbOperate->Operate = DbOperateType::Delete;
-	dbOperate->TableID = tableID;
+	dbOperate->TableId = tableID;
 	dbOperate->Record = record;
 	AddDBOperate(dbOperate);
 }
 
-void AsyncDBWriter::OnRecordEraseByIndex(unsigned int tableID, unsigned int indexID, void* record)
+void AsyncDBWriter::OnRecordEraseByIndex(unsigned int tableID, unsigned int indexId, void* record)
 {
 	DbOperate* dbOperate = AllocateDBOperate();
 	dbOperate->Operate = DbOperateType::DeleteByIndex;
-	dbOperate->TableID = tableID;
-	dbOperate->IndexID = indexID;
+	dbOperate->TableId = tableID;
+	dbOperate->IndexId = indexId;
 	dbOperate->Record = record;
 	AddDBOperate(dbOperate);
 }
@@ -131,7 +131,7 @@ void AsyncDBWriter::OnRecordUpdate(unsigned int tableID, void* record)
 {
 	DbOperate* dbOperate = AllocateDBOperate();
 	dbOperate->Operate = DbOperateType::Update;
-	dbOperate->TableID = tableID;
+	dbOperate->TableId = tableID;
 	dbOperate->Record = record;
 	AddDBOperate(dbOperate);
 }
@@ -140,7 +140,7 @@ void AsyncDBWriter::OnRecordTruncate(unsigned int tableID)
 {
 	DbOperate* dbOperate = AllocateDBOperate();
 	dbOperate->Operate = DbOperateType::Truncate;
-	dbOperate->TableID = tableID;
+	dbOperate->TableId = tableID;
 	dbOperate->Record = nullptr;
 	AddDBOperate(dbOperate);
 }
@@ -154,7 +154,7 @@ void AsyncDBWriter::Run()
 }
 void AsyncDBWriter::CheckConnect()
 {
-	if (m_Connected)
+	if (connected_)
 	{
 		return;
 	}
@@ -187,7 +187,7 @@ void AsyncDBWriter::ThreadExit()
 }
 void AsyncDBWriter::HandleDBOperate()
 {
-	if (!m_Connected)
+	if (!connected_)
 	{
 		// 未连接时整队保留（不抽干、不释放），积压规模与原因由 CheckConnect 同轮上报
 		return;
@@ -217,10 +217,10 @@ void AsyncDBWriter::HandleDBOperate()
 	}
 	catch(const exception& e)
 	{
-		const unsigned int failedTableID = dbOperate != nullptr ? dbOperate->TableID : 0;
+		const unsigned int failedTableID = dbOperate != nullptr ? dbOperate->TableId : 0;
 		const int failedOperateType = dbOperate != nullptr ? static_cast<int>(dbOperate->Operate) : -1;
 		const TableSchema* failedSchema = schemaRegistry_ != nullptr ? schemaRegistry_->GetSchema(failedTableID) : nullptr;
-		WriteLog(LogLevel::Error, "AsyncDBWriter: HandleDBOperate failed. TableID:0x%X, Table:%s, Operate:%d, Message:%s",
+		WriteLog(LogLevel::Error, "AsyncDBWriter: HandleDBOperate failed. TableId:0x%X, Table:%s, Operate:%d, Message:%s",
 			failedTableID, failedSchema != nullptr ? failedSchema->tableName : "unknown", failedOperateType, e.what());
 		// DisConnect 会连同队列一起丢弃并上报丢弃条数
 		DisConnect();
@@ -281,7 +281,7 @@ void AsyncDBWriter::TruncateTables(DbOperate* dbOperate)
 }
 void AsyncDBWriter::InsertRecord(DbOperate* dbOperate)
 {
-	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableID);
+	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableId);
 	if (schema)
 	{
 		m_DB->Insert(schema, dbOperate->Record);
@@ -289,7 +289,7 @@ void AsyncDBWriter::InsertRecord(DbOperate* dbOperate)
 }
 void AsyncDBWriter::BatchInsertRecords(DbOperate* dbOperate)
 {
-	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableID);
+	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableId);
 	if (!schema) return;
 
 	auto& batch = static_cast<DBOperateImpl*>(dbOperate)->GetBatchData();
@@ -300,7 +300,7 @@ void AsyncDBWriter::BatchInsertRecords(DbOperate* dbOperate)
 }
 void AsyncDBWriter::DeleteRecord(DbOperate* dbOperate)
 {
-	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableID);
+	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableId);
 	if (schema)
 	{
 		m_DB->Delete(schema, dbOperate->Record, schema->primaryKeyIndices, schema->primaryKeyCount);
@@ -310,12 +310,12 @@ void AsyncDBWriter::DeleteRecord(DbOperate* dbOperate)
 
 void AsyncDBWriter::DeleteRecordByIndex(DbOperate* dbOperate)
 {
-	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableID);
+	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableId);
 	if (!schema) return;
 
 	for (int i = 0; i < schema->secondaryIndexCount; ++i)
 	{
-		if (schema->secondaryIndices[i].indexID == dbOperate->IndexID)
+		if (schema->secondaryIndices[i].indexId == dbOperate->IndexId)
 		{
 			m_DB->Delete(schema, dbOperate->Record,
 			             schema->secondaryIndices[i].fieldIndices,
@@ -324,12 +324,12 @@ void AsyncDBWriter::DeleteRecordByIndex(DbOperate* dbOperate)
 			return;
 		}
 	}
-	WriteLog(LogLevel::Error, "Incorrect TableID/IndexID for DeleteRecordByIndex. TableID:0x%X, IndexID:%d", dbOperate->TableID, dbOperate->IndexID);
+	WriteLog(LogLevel::Error, "Incorrect TableId/IndexId for DeleteRecordByIndex. TableId:0x%X, IndexId:%d", dbOperate->TableId, dbOperate->IndexId);
 	schema->DeallocateRecord(dbOperate->Record);
 }
 void AsyncDBWriter::UpdateRecord(DbOperate* dbOperate)
 {
-	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableID);
+	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableId);
 	if (schema)
 	{
 		m_DB->Update(schema, dbOperate->Record);
@@ -338,7 +338,7 @@ void AsyncDBWriter::UpdateRecord(DbOperate* dbOperate)
 }
 void AsyncDBWriter::TruncateTable(DbOperate* dbOperate)
 {
-	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableID);
+	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableId);
 	if (schema)
 	{
 		m_DB->TruncateTable(schema->tableName);

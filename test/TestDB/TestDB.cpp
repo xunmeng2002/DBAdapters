@@ -14,7 +14,7 @@
 
 
 using namespace std;
-using namespace mdb;
+using namespace Mdb;
 using namespace Spark::Core;
 using namespace DbAdapters;
 
@@ -202,7 +202,7 @@ static void TestMariadb()
 
 // ===================== SelectWithSqlVectorized 测试 =====================
 
-namespace mdb
+namespace Mdb
 {
     class TestTickRow
     {
@@ -244,7 +244,7 @@ namespace mdb
 
 static void TestDuckdbVectorized()
 {
-    using namespace mdb;
+    using namespace Mdb;
     DuckdbWrapper* duckdb = new DuckdbWrapper(":memory:");
     WriteLog(LogLevel::Info, "TestDB with DuckdbVectorized");
 
@@ -333,7 +333,7 @@ static void TestDuckdbVectorized()
 
 // ============ 多 chunk 回退路径测试：BIGINT→Char、DOUBLE→Int64 ============
 
-namespace mdb
+namespace Mdb
 {
     class TestMultiChunkRow
     {
@@ -368,7 +368,7 @@ namespace mdb
 
 static void TestDuckdbVectorizedMultiChunk()
 {
-    using namespace mdb;
+    using namespace Mdb;
     DuckdbWrapper* duckdb = new DuckdbWrapper(":memory:");
     WriteLog(LogLevel::Info, "TestDB with DuckdbVectorizedMultiChunk");
 
@@ -445,7 +445,7 @@ static void TestDuckdbVectorizedMultiChunk()
 
 // ============ 窄整数/无符号整数落库测试 ============
 
-namespace mdb
+namespace Mdb
 {
     // 成员相邻排布：旧实现把所有窄整数按 4 字节 Int 读写，会越界写坏相邻成员。
     // Allocate 故意填 0xAB 脏值，"NULL 列写 0"与"漏改分支保留脏值"才能被区分开。
@@ -544,10 +544,10 @@ namespace mdb
 static RecordFactory MakeNarrowRowFactory()
 {
     return RecordFactory{
-        []() -> void* { return mdb::TestNarrowRow::Allocate(); },
+        []() -> void* { return Mdb::TestNarrowRow::Allocate(); },
         [](void* records, void* record) {
-            static_cast<std::vector<mdb::TestNarrowRow*>*>(records)->push_back(
-                static_cast<mdb::TestNarrowRow*>(record));
+            static_cast<std::vector<Mdb::TestNarrowRow*>*>(records)->push_back(
+                static_cast<Mdb::TestNarrowRow*>(record));
         },
     };
 }
@@ -556,43 +556,43 @@ static RecordFactory MakeNarrowRowFactory()
 template <typename Wrapper>
 static void InsertNarrowRow(Wrapper* db)
 {
-    const TableSchema& schema = mdb::TestNarrowRow::GetSchema();
+    const TableSchema& schema = Mdb::TestNarrowRow::GetSchema();
     db->CreateTable(&schema);
-    mdb::TestNarrowRow* row = mdb::MakeNarrowRow();
+    Mdb::TestNarrowRow* row = Mdb::MakeNarrowRow();
     db->Insert(&schema, row);
     row->Deallocate();
 }
 
 // 结果级读路径：Sqlite 与 Duckdb 都实现（Duckdb 走 duckdb_value_* 派发）。
 template <typename Wrapper>
-static void SelectNarrowRows(Wrapper* db, std::vector<mdb::TestNarrowRow*>& records)
+static void SelectNarrowRows(Wrapper* db, std::vector<Mdb::TestNarrowRow*>& records)
 {
     RecordFactory factory = MakeNarrowRowFactory();
-    db->SelectAll(&mdb::TestNarrowRow::GetSchema(), &records, factory);
+    db->SelectAll(&Mdb::TestNarrowRow::GetSchema(), &records, factory);
 }
 
 // chunk 读路径：只有 Duckdb 有，走 BindChunkToRecords 与 WriteNullSentinel。
-static void SelectNarrowRowsVectorized(DuckdbWrapper* db, std::vector<mdb::TestNarrowRow*>& records)
+static void SelectNarrowRowsVectorized(DuckdbWrapper* db, std::vector<Mdb::TestNarrowRow*>& records)
 {
     RecordFactory factory = MakeNarrowRowFactory();
     std::string error = db->SelectWithSqlVectorized("SELECT * FROM t_test_narrow;",
-        &mdb::TestNarrowRow::GetSchema(), &records, factory);
+        &Mdb::TestNarrowRow::GetSchema(), &records, factory);
     if (!error.empty())
     {
         WriteLog(LogLevel::Error, "Duckdb narrow vectorized error: %s", error.c_str());
     }
 }
 
-static void CheckNarrowRows(const char* backend, std::vector<mdb::TestNarrowRow*>& records,
+static void CheckNarrowRows(const char* backend, std::vector<Mdb::TestNarrowRow*>& records,
                             uint64_t expectedUInt64Value)
 {
     bool pass = records.size() == 1;
     if (pass)
     {
-        pass = mdb::IsNarrowRowAsExpected(*records[0], expectedUInt64Value);
+        pass = Mdb::IsNarrowRowAsExpected(*records[0], expectedUInt64Value);
         if (!pass)
         {
-            mdb::DumpNarrowRow(backend, *records[0]);
+            Mdb::DumpNarrowRow(backend, *records[0]);
         }
     }
     else
@@ -616,7 +616,7 @@ static void CheckNarrowRows(const char* backend, std::vector<mdb::TestNarrowRow*
 }
 
 // Allocate 已填 0xAB 脏值：NULL 列必须被写成 0，而不是留下脏值。
-static void CheckNarrowNullSentinel(const char* backend, std::vector<mdb::TestNarrowRow*>& records)
+static void CheckNarrowNullSentinel(const char* backend, std::vector<Mdb::TestNarrowRow*>& records)
 {
     bool pass = records.size() == 1
         && records[0]->MinInt8 == 0
@@ -627,7 +627,7 @@ static void CheckNarrowNullSentinel(const char* backend, std::vector<mdb::TestNa
         && records[0]->UInt64Value == 0;
     if (!pass && !records.empty())
     {
-        mdb::DumpNarrowRow(backend, *records[0]);
+        Mdb::DumpNarrowRow(backend, *records[0]);
     }
     for (auto record : records)
     {
@@ -650,7 +650,7 @@ static void TestSqliteNarrowInteger()
     WriteLog(LogLevel::Info, "TestDB with SqliteNarrow");
     InsertNarrowRow(sqlite);
 
-    std::vector<mdb::TestNarrowRow*> records;
+    std::vector<Mdb::TestNarrowRow*> records;
     // SQLite 的 8 字节整数是二补数且无无符号列：0xFFFFFFFFFFFFFFFF 在绑定侧饱和到 INT64_MAX
     SelectNarrowRows(sqlite, records);
     CheckNarrowRows("Sqlite", records, (uint64_t)std::numeric_limits<int64_t>::max());
@@ -674,9 +674,9 @@ static void TestSqliteNarrowSaturation()
     sqlite->Exec("INSERT INTO t_test_narrow_saturate VALUES (1, 300, -5, -40000, 70000, "
                  "3000000000, 5000000000, 2, 3);");
 
-    std::vector<mdb::TestNarrowRow*> records;
+    std::vector<Mdb::TestNarrowRow*> records;
     RecordFactory factory = MakeNarrowRowFactory();
-    sqlite->SelectWithSql("SELECT * FROM t_test_narrow_saturate;", &mdb::TestNarrowRow::GetSchema(),
+    sqlite->SelectWithSql("SELECT * FROM t_test_narrow_saturate;", &Mdb::TestNarrowRow::GetSchema(),
                           &records, factory);
 
     bool pass = records.size() == 1;
@@ -694,7 +694,7 @@ static void TestSqliteNarrowSaturation()
             && row.TailGuard == 3;
         if (!pass)
         {
-            mdb::DumpNarrowRow("SqliteSaturation", row);
+            Mdb::DumpNarrowRow("SqliteSaturation", row);
         }
     }
     for (auto record : records)
@@ -718,11 +718,11 @@ static void TestDuckdbNarrowInteger()
     WriteLog(LogLevel::Info, "TestDB with DuckdbNarrow");
     InsertNarrowRow(duckdb);
 
-    std::vector<mdb::TestNarrowRow*> records;
+    std::vector<Mdb::TestNarrowRow*> records;
     SelectNarrowRows(duckdb, records);
-    CheckNarrowRows("Duckdb", records, mdb::kUInt64Value);
+    CheckNarrowRows("Duckdb", records, Mdb::kUInt64Value);
     SelectNarrowRowsVectorized(duckdb, records);
-    CheckNarrowRows("DuckdbVectorized", records, mdb::kUInt64Value);
+    CheckNarrowRows("DuckdbVectorized", records, Mdb::kUInt64Value);
 
     // NULL 哨兵只走 chunk 路径：WriteNullSentinel 是那条路径独有的分支
     duckdb->Exec("DELETE FROM t_test_narrow;");
@@ -742,10 +742,10 @@ static void TestDuckdbNarrowSaturation()
     duckdb->Exec("INSERT INTO t_test_narrow_saturate VALUES (1, 300, -5, -40000, 70000, "
                  "3000000000, 5000000000, 2, 3);");
 
-    std::vector<mdb::TestNarrowRow*> records;
+    std::vector<Mdb::TestNarrowRow*> records;
     RecordFactory factory = MakeNarrowRowFactory();
     std::string error = duckdb->SelectWithSqlVectorized(
-        "SELECT * FROM t_test_narrow_saturate;", &mdb::TestNarrowRow::GetSchema(),
+        "SELECT * FROM t_test_narrow_saturate;", &Mdb::TestNarrowRow::GetSchema(),
         &records, factory);
     if (!error.empty())
     {
@@ -767,7 +767,7 @@ static void TestDuckdbNarrowSaturation()
             && row.TailGuard == 3;
         if (!pass)
         {
-            mdb::DumpNarrowRow("DuckdbSaturation", row);
+            Mdb::DumpNarrowRow("DuckdbSaturation", row);
         }
     }
     for (auto record : records)
@@ -786,7 +786,7 @@ static void TestDuckdbNarrowSaturation()
 }
 
 // 往返测试验不出列类型（Duckdb 对窄整数有隐式转换），直接查 typeof 断言 DDL 映射。
-namespace mdb
+namespace Mdb
 {
     class TestTypeNameRow
     {
@@ -834,17 +834,17 @@ static void TestDuckdbNarrowColumnTypes()
     InsertNarrowRow(duckdb);
 
     RecordFactory factory = {
-        []() -> void* { return mdb::TestTypeNameRow::Allocate(); },
+        []() -> void* { return Mdb::TestTypeNameRow::Allocate(); },
         [](void* records, void* record) {
-            static_cast<std::vector<mdb::TestTypeNameRow*>*>(records)->push_back(
-                static_cast<mdb::TestTypeNameRow*>(record));
+            static_cast<std::vector<Mdb::TestTypeNameRow*>*>(records)->push_back(
+                static_cast<Mdb::TestTypeNameRow*>(record));
         },
     };
-    std::vector<mdb::TestTypeNameRow*> records;
+    std::vector<Mdb::TestTypeNameRow*> records;
     duckdb->SelectWithSql(
         "SELECT typeof(MinInt8), typeof(UInt8Value), typeof(MinInt16), typeof(UInt16Value), "
         "typeof(UInt32Value), typeof(UInt64Value), typeof(HeadGuard) FROM t_test_narrow;",
-        &mdb::TestTypeNameRow::GetSchema(), &records, factory);
+        &Mdb::TestTypeNameRow::GetSchema(), &records, factory);
 
     bool pass = records.size() == 1;
     if (pass)
@@ -890,14 +890,14 @@ static void TestFailureVisibility()
 {
     WriteLog(LogLevel::Info, "===== 失败可见性验证开始：其后 ERROR 为刻意触发 =====");
 
-    const TableSchema& schema = mdb::TestTickRow::GetSchema();
-    mdb::TestTickRow tick;
-    memset(&tick, 0, sizeof(mdb::TestTickRow));
+    const TableSchema& schema = Mdb::TestTickRow::GetSchema();
+    Mdb::TestTickRow tick;
+    memset(&tick, 0, sizeof(Mdb::TestTickRow));
     RecordFactory factory = {
-        []() -> void* { return mdb::TestTickRow::Allocate(); },
+        []() -> void* { return Mdb::TestTickRow::Allocate(); },
         [](void* records, void* record) {
-            static_cast<std::vector<mdb::TestTickRow*>*>(records)->push_back(
-                static_cast<mdb::TestTickRow*>(record));
+            static_cast<std::vector<Mdb::TestTickRow*>*>(records)->push_back(
+                static_cast<Mdb::TestTickRow*>(record));
         },
     };
     const int keyIndices[] = { 0, 1 };
@@ -908,7 +908,7 @@ static void TestFailureVisibility()
     unavailableSqlite.Insert(&schema, &tick);
     const void* twoRecords[] = { &tick, &tick };
     unavailableSqlite.BatchInsert(&schema, twoRecords, 2);
-    std::vector<mdb::TestTickRow*> unavailableRecords;
+    std::vector<Mdb::TestTickRow*> unavailableRecords;
     unavailableSqlite.SelectAll(&schema, &unavailableRecords, factory);
 
     // 2) 库可打开但表不存在：语句级失败（prepare/step）与整批失败规模都应上报
@@ -917,13 +917,13 @@ static void TestFailureVisibility()
     missingTableSqlite.BatchInsert(&schema, twoRecords, 2);
     missingTableSqlite.Update(&schema, &tick);
     missingTableSqlite.Delete(&schema, &tick, keyIndices, 2);
-    std::vector<mdb::TestTickRow*> missingTableRecords;
+    std::vector<Mdb::TestTickRow*> missingTableRecords;
     missingTableSqlite.SelectAll(&schema, &missingTableRecords, factory);
 
     DuckdbWrapper missingTableDuckdb(":memory:");
     missingTableDuckdb.Insert(&schema, &tick);
     missingTableDuckdb.BatchInsert(&schema, twoRecords, 2);
-    std::vector<mdb::TestTickRow*> missingTableDuckdbRecords;
+    std::vector<Mdb::TestTickRow*> missingTableDuckdbRecords;
     missingTableDuckdb.SelectAll(&schema, &missingTableDuckdbRecords, factory);
 
     for (auto record : unavailableRecords)

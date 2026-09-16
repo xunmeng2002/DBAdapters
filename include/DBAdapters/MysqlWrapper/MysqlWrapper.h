@@ -34,7 +34,7 @@ public:
 
 private:
     struct Impl;
-    Impl* m_Impl;
-    std::string m_Host;
+    Impl* impl_;
+    std::string host_;
 };
 }

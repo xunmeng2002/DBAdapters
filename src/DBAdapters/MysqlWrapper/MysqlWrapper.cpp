@@ -226,12 +226,12 @@ struct MysqlWrapper::Impl
 };
 
 MysqlWrapper::MysqlWrapper(const std::string& host)
-    : m_Impl(nullptr), m_Host(host)
+    : impl_(nullptr), host_(host)
 {
     // Session 构造即建连，失败抛异常；记录后继续抛出，保持调用方原有的失败感知（本 wrapper 的 Connect 不建连）
     try
     {
-        m_Impl = new Impl(mysqlx::Session(host));
+        impl_ = new Impl(mysqlx::Session(host));
     }
     catch (const std::exception& e)
     {
@@ -242,23 +242,23 @@ MysqlWrapper::MysqlWrapper(const std::string& host)
 MysqlWrapper::~MysqlWrapper()
 {
     DisConnect();
-    delete m_Impl;
+    delete impl_;
 }
 
 bool MysqlWrapper::Connect()
 {
-    return m_Impl != nullptr;
+    return impl_ != nullptr;
 }
 void MysqlWrapper::DisConnect()
 {
-    if (m_Impl)
+    if (impl_)
     {
-        m_Impl->session.close();
+        impl_->session.close();
     }
 }
 void MysqlWrapper::Exec(const char* sql)
 {
-    m_Impl->session.sql(sql).execute();
+    impl_->session.sql(sql).execute();
 }
 
 void MysqlWrapper::CreateTable(const TableSchema* schema)
@@ -303,7 +303,7 @@ void MysqlWrapper::Insert(const TableSchema* schema, const void* record)
     params.reserve(schema->fieldCount);
     for (int i = 0; i < schema->fieldCount; ++i)
         params.push_back(FieldToValue(schema->fields[i], record));
-    m_Impl->session.sql(sql).bind(params).execute();
+    impl_->session.sql(sql).bind(params).execute();
 }
 void MysqlWrapper::BatchInsert(const TableSchema* schema, const void* const* records, int count)
 {
@@ -324,7 +324,7 @@ void MysqlWrapper::Update(const TableSchema* schema, const void* record)
         int idx = schema->primaryKeyIndices[i];
         params.push_back(FieldToValue(schema->fields[idx], record));
     }
-    m_Impl->session.sql(sql).bind(params).execute();
+    impl_->session.sql(sql).bind(params).execute();
 }
 void MysqlWrapper::Delete(const TableSchema* schema, const void* record,
                             const int* keyFieldIndices, int keyFieldCount)
@@ -334,7 +334,7 @@ void MysqlWrapper::Delete(const TableSchema* schema, const void* record,
     params.reserve(keyFieldCount);
     for (int i = 0; i < keyFieldCount; ++i)
         params.push_back(FieldToValue(schema->fields[keyFieldIndices[i]], record));
-    m_Impl->session.sql(sql).bind(params).execute();
+    impl_->session.sql(sql).bind(params).execute();
 }
 
 void MysqlWrapper::SelectAll(const TableSchema* schema, void* recordsList,
@@ -344,13 +344,13 @@ void MysqlWrapper::SelectAll(const TableSchema* schema, void* recordsList,
     sql += schema->tableName;
     sql += "`;";
 
-    auto result = m_Impl->session.sql(sql).execute();
+    auto result = impl_->session.sql(sql).execute();
     ReadResultRows(result, schema, recordsList, factory);
 }
 void MysqlWrapper::SelectWithSql(const char* sql, const TableSchema* schema,
                                    void* recordsList, const RecordFactory& factory)
 {
-    auto result = m_Impl->session.sql(sql).execute();
+    auto result = impl_->session.sql(sql).execute();
     ReadResultRows(result, schema, recordsList, factory);
 }
 }

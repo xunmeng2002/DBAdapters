@@ -34,6 +34,6 @@ public:
 
 private:
 	struct Impl;
-	Impl* m_Impl;
+	Impl* impl_;
 };
 }

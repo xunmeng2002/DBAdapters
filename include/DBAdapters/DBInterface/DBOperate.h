@@ -12,8 +12,8 @@ public:
 
 
 	DbOperateType Operate;
-	unsigned int TableID;
-	unsigned int IndexID;
+	unsigned int TableId;
+	unsigned int IndexId;
 	void* Record;
 };
 }

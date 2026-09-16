@@ -3,12 +3,12 @@
 #include <Spark/Types.h>
 
 using DbAdapters::TableSchema;
-namespace mdb
+namespace Mdb
 {
 	class TradingDay
 	{
 	public:
-		static constexpr unsigned int TableID = 0x0001;
+		static constexpr unsigned int TableId = 0x0001;
 		//主键
 		Int32Type PK;
 		//当前交易日
@@ -26,7 +26,7 @@ namespace mdb
 	class Exchange
 	{
 	public:
-		static constexpr unsigned int TableID = 0x0002;
+		static constexpr unsigned int TableId = 0x0002;
 		//交易所代码
 		ExchangeIdType ExchangeId;
 		//交易所名称
@@ -42,7 +42,7 @@ namespace mdb
 	class Product
 	{
 	public:
-		static constexpr unsigned int TableID = 0x0003;
+		static constexpr unsigned int TableId = 0x0003;
 		//交易所代码
 		ExchangeIdType ExchangeId;
 		//品种代码
@@ -76,7 +76,7 @@ namespace mdb
 	class Instrument
 	{
 	public:
-		static constexpr unsigned int TableID = 0x0004;
+		static constexpr unsigned int TableId = 0x0004;
 		//交易所代码
 		ExchangeIdType ExchangeId;
 		//合约代码
@@ -118,7 +118,7 @@ namespace mdb
 	class PrimaryAccount
 	{
 	public:
-		static constexpr unsigned int TableID = 0x0005;
+		static constexpr unsigned int TableId = 0x0005;
 		//主账户代码
 		AccountIdType PrimaryAccountId;
 		//主账户名称
@@ -148,7 +148,7 @@ namespace mdb
 	class Account
 	{
 	public:
-		static constexpr unsigned int TableID = 0x0006;
+		static constexpr unsigned int TableId = 0x0006;
 		//账户代码
 		AccountIdType AccountId;
 		//账户名称
@@ -176,7 +176,7 @@ namespace mdb
 	class Capital
 	{
 	public:
-		static constexpr unsigned int TableID = 0x0007;
+		static constexpr unsigned int TableId = 0x0007;
 		//交易日
 		DateType TradingDay;
 		//账户代码
@@ -228,7 +228,7 @@ namespace mdb
 	class Position
 	{
 	public:
-		static constexpr unsigned int TableID = 0x0008;
+		static constexpr unsigned int TableId = 0x0008;
 		//交易日
 		DateType TradingDay;
 		//账户代码
@@ -290,7 +290,7 @@ namespace mdb
 	class PositionDetail
 	{
 	public:
-		static constexpr unsigned int TableID = 0x0009;
+		static constexpr unsigned int TableId = 0x0009;
 		//交易日
 		DateType TradingDay;
 		//账户代码
@@ -352,7 +352,7 @@ namespace mdb
 	class Order
 	{
 	public:
-		static constexpr unsigned int TableID = 0x000A;
+		static constexpr unsigned int TableId = 0x000A;
 		//交易日
 		DateType TradingDay;
 		//账户代码
@@ -430,7 +430,7 @@ namespace mdb
 	class Trade
 	{
 	public:
-		static constexpr unsigned int TableID = 0x000B;
+		static constexpr unsigned int TableId = 0x000B;
 		//交易日
 		DateType TradingDay;
 		//账户代码

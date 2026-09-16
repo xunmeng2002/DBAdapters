@@ -23,7 +23,7 @@ void DBOperateImpl::DeallocateRecord()
 	}
 	if (schema_registry_)
 	{
-		const TableSchema* schema = schema_registry_->GetSchema(TableID);
+		const TableSchema* schema = schema_registry_->GetSchema(TableId);
 		if (schema && schema->DeallocateRecord && Record)
 		{
 			schema->DeallocateRecord(Record);
