@@ -4,7 +4,7 @@
 #include <string>
 
 
-namespace dbadapters
+namespace DbAdapters
 {
 class MYSQLWRAPPER_EXPORTS MysqlWrapper : public DB
 {

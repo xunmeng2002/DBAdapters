@@ -5,7 +5,7 @@
 #include <memory>
 
 
-namespace dbadapters
+namespace DbAdapters
 {
 class MARIADBWRAPPER_EXPORTS MariadbWrapper : public DB
 {

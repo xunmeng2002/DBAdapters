@@ -11,9 +11,9 @@
 #include <vector>
 
 
-namespace dbadapters
+namespace DbAdapters
 {
-    using spark::core::LogLevel;
+    using Spark::Core::LogLevel;
 
     void BindField(sql::PreparedStatement* pstmt, int paramIndex, const FieldDescriptor& field, const void* record)
     {

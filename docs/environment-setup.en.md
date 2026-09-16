@@ -26,7 +26,7 @@
     - [2.6 Verification](#26-verification)
   - [3. Troubleshooting](#3-troubleshooting)
     - [3.1 vcpkg Timeout / Cannot Connect to GitHub](#31-vcpkg-timeout--cannot-connect-to-github)
-    - [3.2 VS Says "Could not find Spark" / "Could not find duckdb"](#32-vs-says-could-not-find-spark--could-not-find-duckdb)
+    - [3.2 VS Says "Could not find Spark" / "Could not find duckdb"](#32-vs-says-could-not-find-Spark--could-not-find-duckdb)
     - [3.3 cmake cannot find Ninja in WSL](#33-cmake-cannot-find-ninja-in-wsl)
     - [3.4 Git errors after turning proxy off](#34-git-errors-after-turning-proxy-off)
 

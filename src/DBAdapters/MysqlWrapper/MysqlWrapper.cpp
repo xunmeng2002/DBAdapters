@@ -9,9 +9,9 @@
 #include <vector>
 
 
-namespace dbadapters
+namespace DbAdapters
 {
-    using spark::core::LogLevel;
+    using Spark::Core::LogLevel;
 
     mysqlx::Value FieldToValue(const FieldDescriptor& field, const void* record)
     {

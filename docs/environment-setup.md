@@ -26,7 +26,7 @@
     - [2.6 验证](#26-验证)
   - [三、常见问题](#三常见问题)
     - [3.1 vcpkg 拉取超时 / 无法连接 GitHub](#31-vcpkg-拉取超时--无法连接-github)
-    - [3.2 VS 提示 "Could not find Spark" / "Could not find duckdb"](#32-vs-提示-could-not-find-spark--could-not-find-duckdb)
+    - [3.2 VS 提示 "Could not find Spark" / "Could not find duckdb"](#32-vs-提示-could-not-find-Spark--could-not-find-duckdb)
     - [3.3 WSL 中 cmake 找不到 Ninja](#33-wsl-中-cmake-找不到-ninja)
     - [3.4 代理关闭后 Git 报错](#34-代理关闭后-git-报错)
 

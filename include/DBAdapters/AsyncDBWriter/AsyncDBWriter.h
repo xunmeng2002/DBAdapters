@@ -12,9 +12,9 @@
 #include <mutex>
 #include <condition_variable>
 
-namespace dbadapters
+namespace DbAdapters
 {
-class ASYNCDBWRITER_EXPORTS AsyncDBWriter : public spark::core::ThreadBase, public MdbSubscriber
+class ASYNCDBWRITER_EXPORTS AsyncDBWriter : public Spark::Core::ThreadBase, public MdbSubscriber
 {
 public:
 	AsyncDBWriter(DB* db, SchemaRegistry* schemaRegistry);
@@ -24,7 +24,7 @@ public:
 	bool Connect();
 	void DisConnect();
 
-	virtual void OnTableOp(DBOperateType op) override;
+	virtual void OnTableOp(DbOperateType op) override;
 	virtual void OnRecordInsert(unsigned int tableID, void* record) override;
 	virtual void OnRecordBatchInsert(unsigned int tableID, std::vector<const void*>* records) override;
 	virtual void OnRecordErase(unsigned int tableID, void* record) override;
@@ -39,33 +39,33 @@ protected:
 	void CheckConnect();
 	void CheckDBOperate();
 	void HandleDBOperate();
-	DBOperate* GetDBOperate();
+	DbOperate* GetDBOperate();
 
 private:
-	DBOperate* AllocateDBOperate();
-	void AddDBOperate(DBOperate* dbOperate);
+	DbOperate* AllocateDBOperate();
+	void AddDBOperate(DbOperate* dbOperate);
 	int PendingOperateCount();
 
-	void CreateTables(DBOperate* dbOperate);
-	void DropTables(DBOperate* dbOperate);
-	void TruncateTables(DBOperate* dbOperate);
-	void InsertRecord(DBOperate* dbOperate);
-	void DeleteRecord(DBOperate* dbOperate);
-	void DeleteRecordByIndex(DBOperate* dbOperate);
-	void UpdateRecord(DBOperate* dbOperate);
-	void BatchInsertRecords(DBOperate* dbOperate);
-	void TruncateTable(DBOperate* dbOperate);
+	void CreateTables(DbOperate* dbOperate);
+	void DropTables(DbOperate* dbOperate);
+	void TruncateTables(DbOperate* dbOperate);
+	void InsertRecord(DbOperate* dbOperate);
+	void DeleteRecord(DbOperate* dbOperate);
+	void DeleteRecordByIndex(DbOperate* dbOperate);
+	void UpdateRecord(DbOperate* dbOperate);
+	void BatchInsertRecords(DbOperate* dbOperate);
+	void TruncateTable(DbOperate* dbOperate);
 
 private:
-	// 连接失败按固定重试次数节流上报：每轮 Run 都会重试一次连接，不节流会按 m_TimeOut 频率刷屏
-	static constexpr int kConnectFailureReportInterval = 100;
+	// 连接失败按固定重试次数节流上报：每轮 Run 都会重试一次连接，不节流会按 timeOut_ 频率刷屏
+	static constexpr int connectFailureReportInterval_ = 100;
 
 	DB* m_DB;
-	SchemaRegistry* m_SchemaRegistry;
-	DBSubscriber* m_DBSubscriber;
-	std::list<DBOperate*> m_DBOperates;
-	std::mutex m_Mutex;
-	std::condition_variable m_ConditionVariable;
-	FailureLogThrottle m_ConnectFailureLogThrottle{ kConnectFailureReportInterval };
+	SchemaRegistry* schemaRegistry_;
+	DBSubscriber* dbSubscriber_;
+	std::list<DbOperate*> dbOperates_;
+	std::mutex mutex_;
+	std::condition_variable conditionVariable_;
+	FailureLogThrottle connectFailureLogThrottle_{ connectFailureReportInterval_ };
 };
 }

@@ -3,8 +3,8 @@
 #include <string>
 #include <cstring>
 
-using namespace spark;
-using namespace dbadapters;
+using namespace Spark;
+using namespace DbAdapters;
 namespace mdb
 {
 	thread_local char t_MdbDataStringBuffer[10240];
@@ -46,18 +46,18 @@ namespace mdb
 	const char* Exchange::GetString() const
 	{
 		sprintf(t_MdbDataStringBuffer, "%s,%s",
-			ExchangeID, ExchangeName);
+			ExchangeId, ExchangeName);
 		return t_MdbDataStringBuffer;
 	}
 	int Exchange::GetSqlString(char* buff) const
 	{
 		return sprintf(buff, "\n('%s','%s'),",
-			ExchangeID, ExchangeName);
+			ExchangeId, ExchangeName);
 	}
 	const char* Exchange::GetDebugString() const
 	{
-		sprintf(t_MdbDataStringBuffer, "Exchange:ExchangeID:[%s], ExchangeName:[%s]",
-			ExchangeID, ExchangeName);
+		sprintf(t_MdbDataStringBuffer, "Exchange:ExchangeId:[%s], ExchangeName:[%s]",
+			ExchangeId, ExchangeName);
 		return t_MdbDataStringBuffer;
 	}
 
@@ -72,18 +72,18 @@ namespace mdb
 	const char* Product::GetString() const
 	{
 		sprintf(t_MdbDataStringBuffer, "%s,%s,%s,%d,%d,%f,%lld,%lld,%lld,%lld,%s",
-			ExchangeID, ProductID, ProductName, (int)ProductClass, VolumeMultiple, PriceTick, MaxMarketOrderVolume, MinMarketOrderVolume, MaxLimitOrderVolume, MinLimitOrderVolume, SessionName);
+			ExchangeId, ProductId, ProductName, (int)ProductClass, VolumeMultiple, PriceTick, MaxMarketOrderVolume, MinMarketOrderVolume, MaxLimitOrderVolume, MinLimitOrderVolume, SessionName);
 		return t_MdbDataStringBuffer;
 	}
 	int Product::GetSqlString(char* buff) const
 	{
 		return sprintf(buff, "\n('%s','%s','%s','%d','%d','%f','%lld','%lld','%lld','%lld','%s'),",
-			ExchangeID, ProductID, ProductName, (int)ProductClass, VolumeMultiple, PriceTick, MaxMarketOrderVolume, MinMarketOrderVolume, MaxLimitOrderVolume, MinLimitOrderVolume, SessionName);
+			ExchangeId, ProductId, ProductName, (int)ProductClass, VolumeMultiple, PriceTick, MaxMarketOrderVolume, MinMarketOrderVolume, MaxLimitOrderVolume, MinLimitOrderVolume, SessionName);
 	}
 	const char* Product::GetDebugString() const
 	{
-		sprintf(t_MdbDataStringBuffer, "Product:ExchangeID:[%s], ProductID:[%s], ProductName:[%s], ProductClass:[%d], VolumeMultiple:[%d], PriceTick:[%f], MaxMarketOrderVolume:[%lld], MinMarketOrderVolume:[%lld], MaxLimitOrderVolume:[%lld], MinLimitOrderVolume:[%lld], SessionName:[%s]",
-			ExchangeID, ProductID, ProductName, (int)ProductClass, VolumeMultiple, PriceTick, MaxMarketOrderVolume, MinMarketOrderVolume, MaxLimitOrderVolume, MinLimitOrderVolume, SessionName);
+		sprintf(t_MdbDataStringBuffer, "Product:ExchangeId:[%s], ProductId:[%s], ProductName:[%s], ProductClass:[%d], VolumeMultiple:[%d], PriceTick:[%f], MaxMarketOrderVolume:[%lld], MinMarketOrderVolume:[%lld], MaxLimitOrderVolume:[%lld], MinLimitOrderVolume:[%lld], SessionName:[%s]",
+			ExchangeId, ProductId, ProductName, (int)ProductClass, VolumeMultiple, PriceTick, MaxMarketOrderVolume, MinMarketOrderVolume, MaxLimitOrderVolume, MinLimitOrderVolume, SessionName);
 		return t_MdbDataStringBuffer;
 	}
 
@@ -98,18 +98,18 @@ namespace mdb
 	const char* Instrument::GetString() const
 	{
 		sprintf(t_MdbDataStringBuffer, "%s,%s,%s,%s,%s,%d,%d,%d,%d,%f,%lld,%lld,%lld,%lld,%s",
-			ExchangeID, InstrumentID, ExchangeInstID, InstrumentName, ProductID, (int)ProductClass, (int)InstrumentClass, Rank, VolumeMultiple, PriceTick, MaxMarketOrderVolume, MinMarketOrderVolume, MaxLimitOrderVolume, MinLimitOrderVolume, SessionName);
+			ExchangeId, InstrumentId, ExchangeInstId, InstrumentName, ProductId, (int)ProductClass, (int)InstrumentClass, Rank, VolumeMultiple, PriceTick, MaxMarketOrderVolume, MinMarketOrderVolume, MaxLimitOrderVolume, MinLimitOrderVolume, SessionName);
 		return t_MdbDataStringBuffer;
 	}
 	int Instrument::GetSqlString(char* buff) const
 	{
 		return sprintf(buff, "\n('%s','%s','%s','%s','%s','%d','%d','%d','%d','%f','%lld','%lld','%lld','%lld','%s'),",
-			ExchangeID, InstrumentID, ExchangeInstID, InstrumentName, ProductID, (int)ProductClass, (int)InstrumentClass, Rank, VolumeMultiple, PriceTick, MaxMarketOrderVolume, MinMarketOrderVolume, MaxLimitOrderVolume, MinLimitOrderVolume, SessionName);
+			ExchangeId, InstrumentId, ExchangeInstId, InstrumentName, ProductId, (int)ProductClass, (int)InstrumentClass, Rank, VolumeMultiple, PriceTick, MaxMarketOrderVolume, MinMarketOrderVolume, MaxLimitOrderVolume, MinLimitOrderVolume, SessionName);
 	}
 	const char* Instrument::GetDebugString() const
 	{
-		sprintf(t_MdbDataStringBuffer, "Instrument:ExchangeID:[%s], InstrumentID:[%s], ExchangeInstID:[%s], InstrumentName:[%s], ProductID:[%s], ProductClass:[%d], InstrumentClass:[%d], Rank:[%d], VolumeMultiple:[%d], PriceTick:[%f], MaxMarketOrderVolume:[%lld], MinMarketOrderVolume:[%lld], MaxLimitOrderVolume:[%lld], MinLimitOrderVolume:[%lld], SessionName:[%s]",
-			ExchangeID, InstrumentID, ExchangeInstID, InstrumentName, ProductID, (int)ProductClass, (int)InstrumentClass, Rank, VolumeMultiple, PriceTick, MaxMarketOrderVolume, MinMarketOrderVolume, MaxLimitOrderVolume, MinLimitOrderVolume, SessionName);
+		sprintf(t_MdbDataStringBuffer, "Instrument:ExchangeId:[%s], InstrumentId:[%s], ExchangeInstId:[%s], InstrumentName:[%s], ProductId:[%s], ProductClass:[%d], InstrumentClass:[%d], Rank:[%d], VolumeMultiple:[%d], PriceTick:[%f], MaxMarketOrderVolume:[%lld], MinMarketOrderVolume:[%lld], MaxLimitOrderVolume:[%lld], MinLimitOrderVolume:[%lld], SessionName:[%s]",
+			ExchangeId, InstrumentId, ExchangeInstId, InstrumentName, ProductId, (int)ProductClass, (int)InstrumentClass, Rank, VolumeMultiple, PriceTick, MaxMarketOrderVolume, MinMarketOrderVolume, MaxLimitOrderVolume, MinLimitOrderVolume, SessionName);
 		return t_MdbDataStringBuffer;
 	}
 
@@ -124,18 +124,18 @@ namespace mdb
 	const char* PrimaryAccount::GetString() const
 	{
 		sprintf(t_MdbDataStringBuffer, "%s,%s,%d,%s,%d,%d,%d,%d,%d",
-			PrimaryAccountID, PrimaryAccountName, (int)AccountClass, BrokerPassword, OfferID, IsAllowLogin, IsSimulateAccount, (int)LoginStatus, (int)InitStatus);
+			PrimaryAccountId, PrimaryAccountName, (int)AccountClass, BrokerPassword, OfferId, IsAllowLogin, IsSimulateAccount, (int)LoginStatus, (int)InitStatus);
 		return t_MdbDataStringBuffer;
 	}
 	int PrimaryAccount::GetSqlString(char* buff) const
 	{
 		return sprintf(buff, "\n('%s','%s','%d','%s','%d','%d','%d','%d','%d'),",
-			PrimaryAccountID, PrimaryAccountName, (int)AccountClass, BrokerPassword, OfferID, IsAllowLogin, IsSimulateAccount, (int)LoginStatus, (int)InitStatus);
+			PrimaryAccountId, PrimaryAccountName, (int)AccountClass, BrokerPassword, OfferId, IsAllowLogin, IsSimulateAccount, (int)LoginStatus, (int)InitStatus);
 	}
 	const char* PrimaryAccount::GetDebugString() const
 	{
-		sprintf(t_MdbDataStringBuffer, "PrimaryAccount:PrimaryAccountID:[%s], PrimaryAccountName:[%s], AccountClass:[%d], BrokerPassword:[%s], OfferID:[%d], IsAllowLogin:[%d], IsSimulateAccount:[%d], LoginStatus:[%d], InitStatus:[%d]",
-			PrimaryAccountID, PrimaryAccountName, (int)AccountClass, BrokerPassword, OfferID, IsAllowLogin, IsSimulateAccount, (int)LoginStatus, (int)InitStatus);
+		sprintf(t_MdbDataStringBuffer, "PrimaryAccount:PrimaryAccountId:[%s], PrimaryAccountName:[%s], AccountClass:[%d], BrokerPassword:[%s], OfferId:[%d], IsAllowLogin:[%d], IsSimulateAccount:[%d], LoginStatus:[%d], InitStatus:[%d]",
+			PrimaryAccountId, PrimaryAccountName, (int)AccountClass, BrokerPassword, OfferId, IsAllowLogin, IsSimulateAccount, (int)LoginStatus, (int)InitStatus);
 		return t_MdbDataStringBuffer;
 	}
 
@@ -150,18 +150,18 @@ namespace mdb
 	const char* Account::GetString() const
 	{
 		sprintf(t_MdbDataStringBuffer, "%s,%s,%d,%d,%s,%d,%d,%d",
-			AccountID, AccountName, (int)AccountType, (int)AccountStatus, Password, TradeGroupID, RiskGroupID, CommissionGroupID);
+			AccountId, AccountName, (int)AccountType, (int)AccountStatus, Password, TradeGroupId, RiskGroupId, CommissionGroupId);
 		return t_MdbDataStringBuffer;
 	}
 	int Account::GetSqlString(char* buff) const
 	{
 		return sprintf(buff, "\n('%s','%s','%d','%d','%s','%d','%d','%d'),",
-			AccountID, AccountName, (int)AccountType, (int)AccountStatus, Password, TradeGroupID, RiskGroupID, CommissionGroupID);
+			AccountId, AccountName, (int)AccountType, (int)AccountStatus, Password, TradeGroupId, RiskGroupId, CommissionGroupId);
 	}
 	const char* Account::GetDebugString() const
 	{
-		sprintf(t_MdbDataStringBuffer, "Account:AccountID:[%s], AccountName:[%s], AccountType:[%d], AccountStatus:[%d], Password:[%s], TradeGroupID:[%d], RiskGroupID:[%d], CommissionGroupID:[%d]",
-			AccountID, AccountName, (int)AccountType, (int)AccountStatus, Password, TradeGroupID, RiskGroupID, CommissionGroupID);
+		sprintf(t_MdbDataStringBuffer, "Account:AccountId:[%s], AccountName:[%s], AccountType:[%d], AccountStatus:[%d], Password:[%s], TradeGroupId:[%d], RiskGroupId:[%d], CommissionGroupId:[%d]",
+			AccountId, AccountName, (int)AccountType, (int)AccountStatus, Password, TradeGroupId, RiskGroupId, CommissionGroupId);
 		return t_MdbDataStringBuffer;
 	}
 
@@ -176,18 +176,18 @@ namespace mdb
 	const char* Capital::GetString() const
 	{
 		sprintf(t_MdbDataStringBuffer, "%s,%s,%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f",
-			TradingDay, AccountID, (int)AccountType, Balance, PreBalance, Available, MarketValue, CashIn, CashOut, Margin, Commission, FrozenCash, FrozenMargin, FrozenCommission, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, Deposit, Withdraw);
+			TradingDay, AccountId, (int)AccountType, Balance, PreBalance, Available, MarketValue, CashIn, CashOut, Margin, Commission, FrozenCash, FrozenMargin, FrozenCommission, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, Deposit, Withdraw);
 		return t_MdbDataStringBuffer;
 	}
 	int Capital::GetSqlString(char* buff) const
 	{
 		return sprintf(buff, "\n('%s','%s','%d','%f','%f','%f','%f','%f','%f','%f','%f','%f','%f','%f','%f','%f','%f','%f','%f','%f'),",
-			TradingDay, AccountID, (int)AccountType, Balance, PreBalance, Available, MarketValue, CashIn, CashOut, Margin, Commission, FrozenCash, FrozenMargin, FrozenCommission, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, Deposit, Withdraw);
+			TradingDay, AccountId, (int)AccountType, Balance, PreBalance, Available, MarketValue, CashIn, CashOut, Margin, Commission, FrozenCash, FrozenMargin, FrozenCommission, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, Deposit, Withdraw);
 	}
 	const char* Capital::GetDebugString() const
 	{
-		sprintf(t_MdbDataStringBuffer, "Capital:TradingDay:[%s], AccountID:[%s], AccountType:[%d], Balance:[%f], PreBalance:[%f], Available:[%f], MarketValue:[%f], CashIn:[%f], CashOut:[%f], Margin:[%f], Commission:[%f], FrozenCash:[%f], FrozenMargin:[%f], FrozenCommission:[%f], CloseProfitByDate:[%f], CloseProfitByTrade:[%f], PositionProfitByDate:[%f], PositionProfitByTrade:[%f], Deposit:[%f], Withdraw:[%f]",
-			TradingDay, AccountID, (int)AccountType, Balance, PreBalance, Available, MarketValue, CashIn, CashOut, Margin, Commission, FrozenCash, FrozenMargin, FrozenCommission, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, Deposit, Withdraw);
+		sprintf(t_MdbDataStringBuffer, "Capital:TradingDay:[%s], AccountId:[%s], AccountType:[%d], Balance:[%f], PreBalance:[%f], Available:[%f], MarketValue:[%f], CashIn:[%f], CashOut:[%f], Margin:[%f], Commission:[%f], FrozenCash:[%f], FrozenMargin:[%f], FrozenCommission:[%f], CloseProfitByDate:[%f], CloseProfitByTrade:[%f], PositionProfitByDate:[%f], PositionProfitByTrade:[%f], Deposit:[%f], Withdraw:[%f]",
+			TradingDay, AccountId, (int)AccountType, Balance, PreBalance, Available, MarketValue, CashIn, CashOut, Margin, Commission, FrozenCash, FrozenMargin, FrozenCommission, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, Deposit, Withdraw);
 		return t_MdbDataStringBuffer;
 	}
 
@@ -202,18 +202,18 @@ namespace mdb
 	const char* Position::GetString() const
 	{
 		sprintf(t_MdbDataStringBuffer, "%s,%s,%d,%s,%s,%d,%d,%lld,%lld,%lld,%f,%f,%f,%f,%f,%f,%f,%f,%d,%f,%f,%f,%f,%f,%f",
-			TradingDay, AccountID, (int)AccountType, ExchangeID, InstrumentID, (int)ProductClass, (int)PosiDirection, TotalPosition, PositionFrozen, TodayPosition, MarketValue, CashIn, CashOut, Margin, Commission, FrozenCash, FrozenMargin, FrozenCommission, VolumeMultiple, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, SettlementPrice, PreSettlementPrice);
+			TradingDay, AccountId, (int)AccountType, ExchangeId, InstrumentId, (int)ProductClass, (int)PosiDirection, TotalPosition, PositionFrozen, TodayPosition, MarketValue, CashIn, CashOut, Margin, Commission, FrozenCash, FrozenMargin, FrozenCommission, VolumeMultiple, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, SettlementPrice, PreSettlementPrice);
 		return t_MdbDataStringBuffer;
 	}
 	int Position::GetSqlString(char* buff) const
 	{
 		return sprintf(buff, "\n('%s','%s','%d','%s','%s','%d','%d','%lld','%lld','%lld','%f','%f','%f','%f','%f','%f','%f','%f','%d','%f','%f','%f','%f','%f','%f'),",
-			TradingDay, AccountID, (int)AccountType, ExchangeID, InstrumentID, (int)ProductClass, (int)PosiDirection, TotalPosition, PositionFrozen, TodayPosition, MarketValue, CashIn, CashOut, Margin, Commission, FrozenCash, FrozenMargin, FrozenCommission, VolumeMultiple, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, SettlementPrice, PreSettlementPrice);
+			TradingDay, AccountId, (int)AccountType, ExchangeId, InstrumentId, (int)ProductClass, (int)PosiDirection, TotalPosition, PositionFrozen, TodayPosition, MarketValue, CashIn, CashOut, Margin, Commission, FrozenCash, FrozenMargin, FrozenCommission, VolumeMultiple, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, SettlementPrice, PreSettlementPrice);
 	}
 	const char* Position::GetDebugString() const
 	{
-		sprintf(t_MdbDataStringBuffer, "Position:TradingDay:[%s], AccountID:[%s], AccountType:[%d], ExchangeID:[%s], InstrumentID:[%s], ProductClass:[%d], PosiDirection:[%d], TotalPosition:[%lld], PositionFrozen:[%lld], TodayPosition:[%lld], MarketValue:[%f], CashIn:[%f], CashOut:[%f], Margin:[%f], Commission:[%f], FrozenCash:[%f], FrozenMargin:[%f], FrozenCommission:[%f], VolumeMultiple:[%d], CloseProfitByDate:[%f], CloseProfitByTrade:[%f], PositionProfitByDate:[%f], PositionProfitByTrade:[%f], SettlementPrice:[%f], PreSettlementPrice:[%f]",
-			TradingDay, AccountID, (int)AccountType, ExchangeID, InstrumentID, (int)ProductClass, (int)PosiDirection, TotalPosition, PositionFrozen, TodayPosition, MarketValue, CashIn, CashOut, Margin, Commission, FrozenCash, FrozenMargin, FrozenCommission, VolumeMultiple, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, SettlementPrice, PreSettlementPrice);
+		sprintf(t_MdbDataStringBuffer, "Position:TradingDay:[%s], AccountId:[%s], AccountType:[%d], ExchangeId:[%s], InstrumentId:[%s], ProductClass:[%d], PosiDirection:[%d], TotalPosition:[%lld], PositionFrozen:[%lld], TodayPosition:[%lld], MarketValue:[%f], CashIn:[%f], CashOut:[%f], Margin:[%f], Commission:[%f], FrozenCash:[%f], FrozenMargin:[%f], FrozenCommission:[%f], VolumeMultiple:[%d], CloseProfitByDate:[%f], CloseProfitByTrade:[%f], PositionProfitByDate:[%f], PositionProfitByTrade:[%f], SettlementPrice:[%f], PreSettlementPrice:[%f]",
+			TradingDay, AccountId, (int)AccountType, ExchangeId, InstrumentId, (int)ProductClass, (int)PosiDirection, TotalPosition, PositionFrozen, TodayPosition, MarketValue, CashIn, CashOut, Margin, Commission, FrozenCash, FrozenMargin, FrozenCommission, VolumeMultiple, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, SettlementPrice, PreSettlementPrice);
 		return t_MdbDataStringBuffer;
 	}
 
@@ -228,18 +228,18 @@ namespace mdb
 	const char* PositionDetail::GetString() const
 	{
 		sprintf(t_MdbDataStringBuffer, "%s,%s,%d,%s,%s,%d,%d,%s,%s,%lld,%f,%f,%f,%f,%f,%f,%d,%f,%f,%f,%f,%f,%f,%lld,%f",
-			TradingDay, AccountID, (int)AccountType, ExchangeID, InstrumentID, (int)ProductClass, (int)PosiDirection, OpenDate, TradeID, Volume, OpenPrice, MarketValue, CashIn, CashOut, Margin, Commission, VolumeMultiple, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, SettlementPrice, PreSettlementPrice, CloseVolume, CloseAmount);
+			TradingDay, AccountId, (int)AccountType, ExchangeId, InstrumentId, (int)ProductClass, (int)PosiDirection, OpenDate, TradeId, Volume, OpenPrice, MarketValue, CashIn, CashOut, Margin, Commission, VolumeMultiple, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, SettlementPrice, PreSettlementPrice, CloseVolume, CloseAmount);
 		return t_MdbDataStringBuffer;
 	}
 	int PositionDetail::GetSqlString(char* buff) const
 	{
 		return sprintf(buff, "\n('%s','%s','%d','%s','%s','%d','%d','%s','%s','%lld','%f','%f','%f','%f','%f','%f','%d','%f','%f','%f','%f','%f','%f','%lld','%f'),",
-			TradingDay, AccountID, (int)AccountType, ExchangeID, InstrumentID, (int)ProductClass, (int)PosiDirection, OpenDate, TradeID, Volume, OpenPrice, MarketValue, CashIn, CashOut, Margin, Commission, VolumeMultiple, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, SettlementPrice, PreSettlementPrice, CloseVolume, CloseAmount);
+			TradingDay, AccountId, (int)AccountType, ExchangeId, InstrumentId, (int)ProductClass, (int)PosiDirection, OpenDate, TradeId, Volume, OpenPrice, MarketValue, CashIn, CashOut, Margin, Commission, VolumeMultiple, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, SettlementPrice, PreSettlementPrice, CloseVolume, CloseAmount);
 	}
 	const char* PositionDetail::GetDebugString() const
 	{
-		sprintf(t_MdbDataStringBuffer, "PositionDetail:TradingDay:[%s], AccountID:[%s], AccountType:[%d], ExchangeID:[%s], InstrumentID:[%s], ProductClass:[%d], PosiDirection:[%d], OpenDate:[%s], TradeID:[%s], Volume:[%lld], OpenPrice:[%f], MarketValue:[%f], CashIn:[%f], CashOut:[%f], Margin:[%f], Commission:[%f], VolumeMultiple:[%d], CloseProfitByDate:[%f], CloseProfitByTrade:[%f], PositionProfitByDate:[%f], PositionProfitByTrade:[%f], SettlementPrice:[%f], PreSettlementPrice:[%f], CloseVolume:[%lld], CloseAmount:[%f]",
-			TradingDay, AccountID, (int)AccountType, ExchangeID, InstrumentID, (int)ProductClass, (int)PosiDirection, OpenDate, TradeID, Volume, OpenPrice, MarketValue, CashIn, CashOut, Margin, Commission, VolumeMultiple, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, SettlementPrice, PreSettlementPrice, CloseVolume, CloseAmount);
+		sprintf(t_MdbDataStringBuffer, "PositionDetail:TradingDay:[%s], AccountId:[%s], AccountType:[%d], ExchangeId:[%s], InstrumentId:[%s], ProductClass:[%d], PosiDirection:[%d], OpenDate:[%s], TradeId:[%s], Volume:[%lld], OpenPrice:[%f], MarketValue:[%f], CashIn:[%f], CashOut:[%f], Margin:[%f], Commission:[%f], VolumeMultiple:[%d], CloseProfitByDate:[%f], CloseProfitByTrade:[%f], PositionProfitByDate:[%f], PositionProfitByTrade:[%f], SettlementPrice:[%f], PreSettlementPrice:[%f], CloseVolume:[%lld], CloseAmount:[%f]",
+			TradingDay, AccountId, (int)AccountType, ExchangeId, InstrumentId, (int)ProductClass, (int)PosiDirection, OpenDate, TradeId, Volume, OpenPrice, MarketValue, CashIn, CashOut, Margin, Commission, VolumeMultiple, CloseProfitByDate, CloseProfitByTrade, PositionProfitByDate, PositionProfitByTrade, SettlementPrice, PreSettlementPrice, CloseVolume, CloseAmount);
 		return t_MdbDataStringBuffer;
 	}
 
@@ -254,18 +254,18 @@ namespace mdb
 	const char* Order::GetString() const
 	{
 		sprintf(t_MdbDataStringBuffer, "%s,%s,%d,%s,%s,%d,%d,%s,%d,%d,%d,%f,%lld,%lld,%lld,%d,%d,%s,%s,%s,%s,%lld,%d,%d,%d,%d,%d,%d,%f,%f,%f,%d,%d",
-			TradingDay, AccountID, (int)AccountType, ExchangeID, InstrumentID, (int)ProductClass, OrderID, OrderSysID, (int)Direction, (int)OffsetFlag, (int)OrderPriceType, Price, Volume, VolumeTotal, VolumeTraded, VolumeMultiple, (int)OrderStatus, OrderDate, OrderTime, CancelDate, CancelTime, SessionID, ClientOrderID, RequestID, OfferID, TradeGroupID, RiskGroupID, CommissionGroupID, FrozenCash, FrozenMargin, FrozenCommission, RebuildMark, IsForceClose);
+			TradingDay, AccountId, (int)AccountType, ExchangeId, InstrumentId, (int)ProductClass, OrderId, OrderSysId, (int)Direction, (int)OffsetFlag, (int)OrderPriceType, Price, Volume, VolumeTotal, VolumeTraded, VolumeMultiple, (int)OrderStatus, OrderDate, OrderTime, CancelDate, CancelTime, SessionId, ClientOrderId, RequestId, OfferId, TradeGroupId, RiskGroupId, CommissionGroupId, FrozenCash, FrozenMargin, FrozenCommission, RebuildMark, IsForceClose);
 		return t_MdbDataStringBuffer;
 	}
 	int Order::GetSqlString(char* buff) const
 	{
 		return sprintf(buff, "\n('%s','%s','%d','%s','%s','%d','%d','%s','%d','%d','%d','%f','%lld','%lld','%lld','%d','%d','%s','%s','%s','%s','%lld','%d','%d','%d','%d','%d','%d','%f','%f','%f','%d','%d'),",
-			TradingDay, AccountID, (int)AccountType, ExchangeID, InstrumentID, (int)ProductClass, OrderID, OrderSysID, (int)Direction, (int)OffsetFlag, (int)OrderPriceType, Price, Volume, VolumeTotal, VolumeTraded, VolumeMultiple, (int)OrderStatus, OrderDate, OrderTime, CancelDate, CancelTime, SessionID, ClientOrderID, RequestID, OfferID, TradeGroupID, RiskGroupID, CommissionGroupID, FrozenCash, FrozenMargin, FrozenCommission, RebuildMark, IsForceClose);
+			TradingDay, AccountId, (int)AccountType, ExchangeId, InstrumentId, (int)ProductClass, OrderId, OrderSysId, (int)Direction, (int)OffsetFlag, (int)OrderPriceType, Price, Volume, VolumeTotal, VolumeTraded, VolumeMultiple, (int)OrderStatus, OrderDate, OrderTime, CancelDate, CancelTime, SessionId, ClientOrderId, RequestId, OfferId, TradeGroupId, RiskGroupId, CommissionGroupId, FrozenCash, FrozenMargin, FrozenCommission, RebuildMark, IsForceClose);
 	}
 	const char* Order::GetDebugString() const
 	{
-		sprintf(t_MdbDataStringBuffer, "Order:TradingDay:[%s], AccountID:[%s], AccountType:[%d], ExchangeID:[%s], InstrumentID:[%s], ProductClass:[%d], OrderID:[%d], OrderSysID:[%s], Direction:[%d], OffsetFlag:[%d], OrderPriceType:[%d], Price:[%f], Volume:[%lld], VolumeTotal:[%lld], VolumeTraded:[%lld], VolumeMultiple:[%d], OrderStatus:[%d], OrderDate:[%s], OrderTime:[%s], CancelDate:[%s], CancelTime:[%s], SessionID:[%lld], ClientOrderID:[%d], RequestID:[%d], OfferID:[%d], TradeGroupID:[%d], RiskGroupID:[%d], CommissionGroupID:[%d], FrozenCash:[%f], FrozenMargin:[%f], FrozenCommission:[%f], RebuildMark:[%d], IsForceClose:[%d]",
-			TradingDay, AccountID, (int)AccountType, ExchangeID, InstrumentID, (int)ProductClass, OrderID, OrderSysID, (int)Direction, (int)OffsetFlag, (int)OrderPriceType, Price, Volume, VolumeTotal, VolumeTraded, VolumeMultiple, (int)OrderStatus, OrderDate, OrderTime, CancelDate, CancelTime, SessionID, ClientOrderID, RequestID, OfferID, TradeGroupID, RiskGroupID, CommissionGroupID, FrozenCash, FrozenMargin, FrozenCommission, RebuildMark, IsForceClose);
+		sprintf(t_MdbDataStringBuffer, "Order:TradingDay:[%s], AccountId:[%s], AccountType:[%d], ExchangeId:[%s], InstrumentId:[%s], ProductClass:[%d], OrderId:[%d], OrderSysId:[%s], Direction:[%d], OffsetFlag:[%d], OrderPriceType:[%d], Price:[%f], Volume:[%lld], VolumeTotal:[%lld], VolumeTraded:[%lld], VolumeMultiple:[%d], OrderStatus:[%d], OrderDate:[%s], OrderTime:[%s], CancelDate:[%s], CancelTime:[%s], SessionId:[%lld], ClientOrderId:[%d], RequestId:[%d], OfferId:[%d], TradeGroupId:[%d], RiskGroupId:[%d], CommissionGroupId:[%d], FrozenCash:[%f], FrozenMargin:[%f], FrozenCommission:[%f], RebuildMark:[%d], IsForceClose:[%d]",
+			TradingDay, AccountId, (int)AccountType, ExchangeId, InstrumentId, (int)ProductClass, OrderId, OrderSysId, (int)Direction, (int)OffsetFlag, (int)OrderPriceType, Price, Volume, VolumeTotal, VolumeTraded, VolumeMultiple, (int)OrderStatus, OrderDate, OrderTime, CancelDate, CancelTime, SessionId, ClientOrderId, RequestId, OfferId, TradeGroupId, RiskGroupId, CommissionGroupId, FrozenCash, FrozenMargin, FrozenCommission, RebuildMark, IsForceClose);
 		return t_MdbDataStringBuffer;
 	}
 
@@ -280,33 +280,33 @@ namespace mdb
 	const char* Trade::GetString() const
 	{
 		sprintf(t_MdbDataStringBuffer, "%s,%s,%d,%s,%s,%d,%d,%s,%s,%d,%d,%f,%lld,%d,%f,%f,%s,%s",
-			TradingDay, AccountID, (int)AccountType, ExchangeID, InstrumentID, (int)ProductClass, OrderID, OrderSysID, TradeID, (int)Direction, (int)OffsetFlag, Price, Volume, VolumeMultiple, TradeAmount, Commission, TradeDate, TradeTime);
+			TradingDay, AccountId, (int)AccountType, ExchangeId, InstrumentId, (int)ProductClass, OrderId, OrderSysId, TradeId, (int)Direction, (int)OffsetFlag, Price, Volume, VolumeMultiple, TradeAmount, Commission, TradeDate, TradeTime);
 		return t_MdbDataStringBuffer;
 	}
 	int Trade::GetSqlString(char* buff) const
 	{
 		return sprintf(buff, "\n('%s','%s','%d','%s','%s','%d','%d','%s','%s','%d','%d','%f','%lld','%d','%f','%f','%s','%s'),",
-			TradingDay, AccountID, (int)AccountType, ExchangeID, InstrumentID, (int)ProductClass, OrderID, OrderSysID, TradeID, (int)Direction, (int)OffsetFlag, Price, Volume, VolumeMultiple, TradeAmount, Commission, TradeDate, TradeTime);
+			TradingDay, AccountId, (int)AccountType, ExchangeId, InstrumentId, (int)ProductClass, OrderId, OrderSysId, TradeId, (int)Direction, (int)OffsetFlag, Price, Volume, VolumeMultiple, TradeAmount, Commission, TradeDate, TradeTime);
 	}
 	const char* Trade::GetDebugString() const
 	{
-		sprintf(t_MdbDataStringBuffer, "Trade:TradingDay:[%s], AccountID:[%s], AccountType:[%d], ExchangeID:[%s], InstrumentID:[%s], ProductClass:[%d], OrderID:[%d], OrderSysID:[%s], TradeID:[%s], Direction:[%d], OffsetFlag:[%d], Price:[%f], Volume:[%lld], VolumeMultiple:[%d], TradeAmount:[%f], Commission:[%f], TradeDate:[%s], TradeTime:[%s]",
-			TradingDay, AccountID, (int)AccountType, ExchangeID, InstrumentID, (int)ProductClass, OrderID, OrderSysID, TradeID, (int)Direction, (int)OffsetFlag, Price, Volume, VolumeMultiple, TradeAmount, Commission, TradeDate, TradeTime);
+		sprintf(t_MdbDataStringBuffer, "Trade:TradingDay:[%s], AccountId:[%s], AccountType:[%d], ExchangeId:[%s], InstrumentId:[%s], ProductClass:[%d], OrderId:[%d], OrderSysId:[%s], TradeId:[%s], Direction:[%d], OffsetFlag:[%d], Price:[%f], Volume:[%lld], VolumeMultiple:[%d], TradeAmount:[%f], Commission:[%f], TradeDate:[%s], TradeTime:[%s]",
+			TradingDay, AccountId, (int)AccountType, ExchangeId, InstrumentId, (int)ProductClass, OrderId, OrderSysId, TradeId, (int)Direction, (int)OffsetFlag, Price, Volume, VolumeMultiple, TradeAmount, Commission, TradeDate, TradeTime);
 		return t_MdbDataStringBuffer;
 	}
 
 
-	thread_local TradingDay t_CompareTradingDay;
-	thread_local Exchange t_CompareExchange;
-	thread_local Product t_CompareProduct;
-	thread_local Instrument t_CompareInstrument;
-	thread_local PrimaryAccount t_ComparePrimaryAccount;
-	thread_local Account t_CompareAccount;
-	thread_local Capital t_CompareCapital;
-	thread_local Position t_ComparePosition;
-	thread_local PositionDetail t_ComparePositionDetail;
-	thread_local Order t_CompareOrder;
-	thread_local Trade t_CompareTrade;
+	thread_local TradingDay CompareTradingDay;
+	thread_local Exchange CompareExchange;
+	thread_local Product CompareProduct;
+	thread_local Instrument CompareInstrument;
+	thread_local PrimaryAccount ComparePrimaryAccount;
+	thread_local Account CompareAccount;
+	thread_local Capital CompareCapital;
+	thread_local Position ComparePosition;
+	thread_local PositionDetail ComparePositionDetail;
+	thread_local Order CompareOrder;
+	thread_local Trade CompareTrade;
 
 // ====== Schema definitions ======
 // name, type, struct offset, array size (for Char)
@@ -325,7 +325,7 @@ const TableSchema& TradingDay::GetSchema()
 }
 
 static const FieldDescriptor ExchangeFields[] = {
-	{"ExchangeID",   FieldType::Char, offsetof(Exchange, ExchangeID),   sizeof(Exchange::ExchangeID)},
+	{"ExchangeId",   FieldType::Char, offsetof(Exchange, ExchangeId),   sizeof(Exchange::ExchangeId)},
 	{"ExchangeName", FieldType::Char, offsetof(Exchange, ExchangeName), sizeof(Exchange::ExchangeName)},
 };
 static const int ExchangePKIndices[] = {0};
@@ -337,8 +337,8 @@ const TableSchema& Exchange::GetSchema()
 }
 
 static const FieldDescriptor ProductFields[] = {
-	{"ExchangeID",           FieldType::Char,   offsetof(Product, ExchangeID),           sizeof(Product::ExchangeID)},
-	{"ProductID",            FieldType::Char,   offsetof(Product, ProductID),            sizeof(Product::ProductID)},
+	{"ExchangeId",           FieldType::Char,   offsetof(Product, ExchangeId),           sizeof(Product::ExchangeId)},
+	{"ProductId",            FieldType::Char,   offsetof(Product, ProductId),            sizeof(Product::ProductId)},
 	{"ProductName",          FieldType::Char,   offsetof(Product, ProductName),          sizeof(Product::ProductName)},
 	{"ProductClass",         FieldType::Int32,    offsetof(Product, ProductClass),         0},
 	{"VolumeMultiple",       FieldType::Int32,    offsetof(Product, VolumeMultiple),       0},
@@ -358,11 +358,11 @@ const TableSchema& Product::GetSchema()
 }
 
 static const FieldDescriptor InstrumentFields[] = {
-	{"ExchangeID",           FieldType::Char,   offsetof(Instrument, ExchangeID),           sizeof(Instrument::ExchangeID)},
-	{"InstrumentID",         FieldType::Char,   offsetof(Instrument, InstrumentID),         sizeof(Instrument::InstrumentID)},
-	{"ExchangeInstID",       FieldType::Char,   offsetof(Instrument, ExchangeInstID),       sizeof(Instrument::ExchangeInstID)},
+	{"ExchangeId",           FieldType::Char,   offsetof(Instrument, ExchangeId),           sizeof(Instrument::ExchangeId)},
+	{"InstrumentId",         FieldType::Char,   offsetof(Instrument, InstrumentId),         sizeof(Instrument::InstrumentId)},
+	{"ExchangeInstId",       FieldType::Char,   offsetof(Instrument, ExchangeInstId),       sizeof(Instrument::ExchangeInstId)},
 	{"InstrumentName",       FieldType::Char,   offsetof(Instrument, InstrumentName),       sizeof(Instrument::InstrumentName)},
-	{"ProductID",            FieldType::Char,   offsetof(Instrument, ProductID),            sizeof(Instrument::ProductID)},
+	{"ProductId",            FieldType::Char,   offsetof(Instrument, ProductId),            sizeof(Instrument::ProductId)},
 	{"ProductClass",         FieldType::Int32,    offsetof(Instrument, ProductClass),         0},
 	{"InstrumentClass",      FieldType::Int32,    offsetof(Instrument, InstrumentClass),      0},
 	{"Rank",                 FieldType::Int32,    offsetof(Instrument, Rank),                 0},
@@ -383,11 +383,11 @@ const TableSchema& Instrument::GetSchema()
 }
 
 static const FieldDescriptor PrimaryAccountFields[] = {
-	{"PrimaryAccountID",   FieldType::Char,  offsetof(PrimaryAccount, PrimaryAccountID),   sizeof(PrimaryAccount::PrimaryAccountID)},
+	{"PrimaryAccountId",   FieldType::Char,  offsetof(PrimaryAccount, PrimaryAccountId),   sizeof(PrimaryAccount::PrimaryAccountId)},
 	{"PrimaryAccountName", FieldType::Char,  offsetof(PrimaryAccount, PrimaryAccountName), sizeof(PrimaryAccount::PrimaryAccountName)},
 	{"AccountClass",       FieldType::Int32,   offsetof(PrimaryAccount, AccountClass),       0},
 	{"BrokerPassword",     FieldType::Char,  offsetof(PrimaryAccount, BrokerPassword),     sizeof(PrimaryAccount::BrokerPassword)},
-	{"OfferID",            FieldType::Int32,   offsetof(PrimaryAccount, OfferID),            0},
+	{"OfferId",            FieldType::Int32,   offsetof(PrimaryAccount, OfferId),            0},
 	{"IsAllowLogin",       FieldType::Bool,  offsetof(PrimaryAccount, IsAllowLogin),       0},
 	{"IsSimulateAccount",  FieldType::Bool,  offsetof(PrimaryAccount, IsSimulateAccount),  0},
 	{"LoginStatus",        FieldType::Int32,   offsetof(PrimaryAccount, LoginStatus),        0},
@@ -406,14 +406,14 @@ const TableSchema& PrimaryAccount::GetSchema()
 }
 
 static const FieldDescriptor AccountFields[] = {
-	{"AccountID",          FieldType::Char, offsetof(Account, AccountID),          sizeof(Account::AccountID)},
+	{"AccountId",          FieldType::Char, offsetof(Account, AccountId),          sizeof(Account::AccountId)},
 	{"AccountName",        FieldType::Char, offsetof(Account, AccountName),        sizeof(Account::AccountName)},
 	{"AccountType",        FieldType::Int32,  offsetof(Account, AccountType),        0},
 	{"AccountStatus",      FieldType::Int32,  offsetof(Account, AccountStatus),      0},
 	{"Password",           FieldType::Char, offsetof(Account, Password),           sizeof(Account::Password)},
-	{"TradeGroupID",       FieldType::Int32,  offsetof(Account, TradeGroupID),       0},
-	{"RiskGroupID",        FieldType::Int32,  offsetof(Account, RiskGroupID),        0},
-	{"CommissionGroupID",  FieldType::Int32,  offsetof(Account, CommissionGroupID),  0},
+	{"TradeGroupId",       FieldType::Int32,  offsetof(Account, TradeGroupId),       0},
+	{"RiskGroupId",        FieldType::Int32,  offsetof(Account, RiskGroupId),        0},
+	{"CommissionGroupId",  FieldType::Int32,  offsetof(Account, CommissionGroupId),  0},
 };
 static const int AccountPKIndices[] = {0};
 static void DeallocateAccount(void* r) { static_cast<Account*>(r)->Deallocate(); }
@@ -425,7 +425,7 @@ const TableSchema& Account::GetSchema()
 
 static const FieldDescriptor CapitalFields[] = {
 	{"TradingDay",             FieldType::Char,   offsetof(Capital, TradingDay),             sizeof(Capital::TradingDay)},
-	{"AccountID",              FieldType::Char,   offsetof(Capital, AccountID),              sizeof(Capital::AccountID)},
+	{"AccountId",              FieldType::Char,   offsetof(Capital, AccountId),              sizeof(Capital::AccountId)},
 	{"AccountType",            FieldType::Int32,    offsetof(Capital, AccountType),            0},
 	{"Balance",                FieldType::Double, offsetof(Capital, Balance),                0},
 	{"PreBalance",             FieldType::Double, offsetof(Capital, PreBalance),             0},
@@ -459,10 +459,10 @@ const TableSchema& Capital::GetSchema()
 
 static const FieldDescriptor PositionFields[] = {
 	{"TradingDay",            FieldType::Char,   offsetof(Position, TradingDay),            sizeof(Position::TradingDay)},
-	{"AccountID",             FieldType::Char,   offsetof(Position, AccountID),             sizeof(Position::AccountID)},
+	{"AccountId",             FieldType::Char,   offsetof(Position, AccountId),             sizeof(Position::AccountId)},
 	{"AccountType",           FieldType::Int32,    offsetof(Position, AccountType),           0},
-	{"ExchangeID",            FieldType::Char,   offsetof(Position, ExchangeID),            sizeof(Position::ExchangeID)},
-	{"InstrumentID",          FieldType::Char,   offsetof(Position, InstrumentID),          sizeof(Position::InstrumentID)},
+	{"ExchangeId",            FieldType::Char,   offsetof(Position, ExchangeId),            sizeof(Position::ExchangeId)},
+	{"InstrumentId",          FieldType::Char,   offsetof(Position, InstrumentId),          sizeof(Position::InstrumentId)},
 	{"ProductClass",          FieldType::Int32,    offsetof(Position, ProductClass),          0},
 	{"PosiDirection",         FieldType::Int32,    offsetof(Position, PosiDirection),         0},
 	{"TotalPosition",         FieldType::Int64,  offsetof(Position, TotalPosition),         0},
@@ -500,14 +500,14 @@ const TableSchema& Position::GetSchema()
 
 static const FieldDescriptor PositionDetailFields[] = {
 	{"TradingDay",            FieldType::Char,   offsetof(PositionDetail, TradingDay),            sizeof(PositionDetail::TradingDay)},
-	{"AccountID",             FieldType::Char,   offsetof(PositionDetail, AccountID),             sizeof(PositionDetail::AccountID)},
+	{"AccountId",             FieldType::Char,   offsetof(PositionDetail, AccountId),             sizeof(PositionDetail::AccountId)},
 	{"AccountType",           FieldType::Int32,    offsetof(PositionDetail, AccountType),           0},
-	{"ExchangeID",            FieldType::Char,   offsetof(PositionDetail, ExchangeID),            sizeof(PositionDetail::ExchangeID)},
-	{"InstrumentID",          FieldType::Char,   offsetof(PositionDetail, InstrumentID),          sizeof(PositionDetail::InstrumentID)},
+	{"ExchangeId",            FieldType::Char,   offsetof(PositionDetail, ExchangeId),            sizeof(PositionDetail::ExchangeId)},
+	{"InstrumentId",          FieldType::Char,   offsetof(PositionDetail, InstrumentId),          sizeof(PositionDetail::InstrumentId)},
 	{"ProductClass",          FieldType::Int32,    offsetof(PositionDetail, ProductClass),          0},
 	{"PosiDirection",         FieldType::Int32,    offsetof(PositionDetail, PosiDirection),         0},
 	{"OpenDate",              FieldType::Char,   offsetof(PositionDetail, OpenDate),              sizeof(PositionDetail::OpenDate)},
-	{"TradeID",               FieldType::Char,   offsetof(PositionDetail, TradeID),               sizeof(PositionDetail::TradeID)},
+	{"TradeId",               FieldType::Char,   offsetof(PositionDetail, TradeId),               sizeof(PositionDetail::TradeId)},
 	{"Volume",                FieldType::Int64,  offsetof(PositionDetail, Volume),                0},
 	{"OpenPrice",             FieldType::Double, offsetof(PositionDetail, OpenPrice),             0},
 	{"MarketValue",           FieldType::Double, offsetof(PositionDetail, MarketValue),           0},
@@ -541,13 +541,13 @@ const TableSchema& PositionDetail::GetSchema()
 
 static const FieldDescriptor OrderFields[] = {
 	{"TradingDay",            FieldType::Char,   offsetof(Order, TradingDay),            sizeof(Order::TradingDay)},
-	{"AccountID",             FieldType::Char,   offsetof(Order, AccountID),             sizeof(Order::AccountID)},
+	{"AccountId",             FieldType::Char,   offsetof(Order, AccountId),             sizeof(Order::AccountId)},
 	{"AccountType",           FieldType::Int32,    offsetof(Order, AccountType),           0},
-	{"ExchangeID",            FieldType::Char,   offsetof(Order, ExchangeID),            sizeof(Order::ExchangeID)},
-	{"InstrumentID",          FieldType::Char,   offsetof(Order, InstrumentID),          sizeof(Order::InstrumentID)},
+	{"ExchangeId",            FieldType::Char,   offsetof(Order, ExchangeId),            sizeof(Order::ExchangeId)},
+	{"InstrumentId",          FieldType::Char,   offsetof(Order, InstrumentId),          sizeof(Order::InstrumentId)},
 	{"ProductClass",          FieldType::Int32,    offsetof(Order, ProductClass),          0},
-	{"OrderID",               FieldType::Int32,    offsetof(Order, OrderID),              0},
-	{"OrderSysID",            FieldType::Char,   offsetof(Order, OrderSysID),            sizeof(Order::OrderSysID)},
+	{"OrderId",               FieldType::Int32,    offsetof(Order, OrderId),              0},
+	{"OrderSysId",            FieldType::Char,   offsetof(Order, OrderSysId),            sizeof(Order::OrderSysId)},
 	{"Direction",             FieldType::Int32,    offsetof(Order, Direction),             0},
 	{"OffsetFlag",            FieldType::Int32,    offsetof(Order, OffsetFlag),            0},
 	{"OrderPriceType",        FieldType::Int32,    offsetof(Order, OrderPriceType),        0},
@@ -561,13 +561,13 @@ static const FieldDescriptor OrderFields[] = {
 	{"OrderTime",             FieldType::Char,   offsetof(Order, OrderTime),             sizeof(Order::OrderTime)},
 	{"CancelDate",            FieldType::Char,   offsetof(Order, CancelDate),            sizeof(Order::CancelDate)},
 	{"CancelTime",            FieldType::Char,   offsetof(Order, CancelTime),            sizeof(Order::CancelTime)},
-	{"SessionID",             FieldType::Int64,  offsetof(Order, SessionID),             0},
-	{"ClientOrderID",         FieldType::Int32,    offsetof(Order, ClientOrderID),         0},
-	{"RequestID",             FieldType::Int32,    offsetof(Order, RequestID),             0},
-	{"OfferID",               FieldType::Int32,    offsetof(Order, OfferID),               0},
-	{"TradeGroupID",          FieldType::Int32,    offsetof(Order, TradeGroupID),          0},
-	{"RiskGroupID",           FieldType::Int32,    offsetof(Order, RiskGroupID),           0},
-	{"CommissionGroupID",     FieldType::Int32,    offsetof(Order, CommissionGroupID),     0},
+	{"SessionId",             FieldType::Int64,  offsetof(Order, SessionId),             0},
+	{"ClientOrderId",         FieldType::Int32,    offsetof(Order, ClientOrderId),         0},
+	{"RequestId",             FieldType::Int32,    offsetof(Order, RequestId),             0},
+	{"OfferId",               FieldType::Int32,    offsetof(Order, OfferId),               0},
+	{"TradeGroupId",          FieldType::Int32,    offsetof(Order, TradeGroupId),          0},
+	{"RiskGroupId",           FieldType::Int32,    offsetof(Order, RiskGroupId),           0},
+	{"CommissionGroupId",     FieldType::Int32,    offsetof(Order, CommissionGroupId),     0},
 	{"FrozenCash",            FieldType::Double, offsetof(Order, FrozenCash),            0},
 	{"FrozenMargin",          FieldType::Double, offsetof(Order, FrozenMargin),          0},
 	{"FrozenCommission",      FieldType::Double, offsetof(Order, FrozenCommission),      0},
@@ -584,14 +584,14 @@ const TableSchema& Order::GetSchema()
 
 static const FieldDescriptor TradeFields[] = {
 	{"TradingDay",      FieldType::Char,   offsetof(Trade, TradingDay),      sizeof(Trade::TradingDay)},
-	{"AccountID",       FieldType::Char,   offsetof(Trade, AccountID),       sizeof(Trade::AccountID)},
+	{"AccountId",       FieldType::Char,   offsetof(Trade, AccountId),       sizeof(Trade::AccountId)},
 	{"AccountType",     FieldType::Int32,    offsetof(Trade, AccountType),     0},
-	{"ExchangeID",      FieldType::Char,   offsetof(Trade, ExchangeID),      sizeof(Trade::ExchangeID)},
-	{"InstrumentID",    FieldType::Char,   offsetof(Trade, InstrumentID),    sizeof(Trade::InstrumentID)},
+	{"ExchangeId",      FieldType::Char,   offsetof(Trade, ExchangeId),      sizeof(Trade::ExchangeId)},
+	{"InstrumentId",    FieldType::Char,   offsetof(Trade, InstrumentId),    sizeof(Trade::InstrumentId)},
 	{"ProductClass",    FieldType::Int32,    offsetof(Trade, ProductClass),    0},
-	{"OrderID",         FieldType::Int32,    offsetof(Trade, OrderID),         0},
-	{"OrderSysID",      FieldType::Char,   offsetof(Trade, OrderSysID),      sizeof(Trade::OrderSysID)},
-	{"TradeID",         FieldType::Char,   offsetof(Trade, TradeID),         sizeof(Trade::TradeID)},
+	{"OrderId",         FieldType::Int32,    offsetof(Trade, OrderId),         0},
+	{"OrderSysId",      FieldType::Char,   offsetof(Trade, OrderSysId),      sizeof(Trade::OrderSysId)},
+	{"TradeId",         FieldType::Char,   offsetof(Trade, TradeId),         sizeof(Trade::TradeId)},
 	{"Direction",       FieldType::Int32,    offsetof(Trade, Direction),       0},
 	{"OffsetFlag",      FieldType::Int32,    offsetof(Trade, OffsetFlag),      0},
 	{"Price",           FieldType::Double, offsetof(Trade, Price),           0},

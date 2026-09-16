@@ -15,8 +15,8 @@
 
 using namespace std;
 using namespace mdb;
-using namespace spark::core;
-using namespace dbadapters;
+using namespace Spark::Core;
+using namespace DbAdapters;
 
 const char* sqliteDBName = "./Test.sqlitedb";
 const char* duckdbDBName = "./Test.duckdb";
@@ -44,17 +44,17 @@ list<Exchange*>* PrepareExchanges()
 	Exchange* exchange4 = new Exchange();
 	Exchange* exchange5 = new Exchange();
 	Exchange* exchange6 = new Exchange();
-	strcpy(exchange1->ExchangeID, "SHFE");
+	strcpy(exchange1->ExchangeId, "SHFE");
 	strcpy(exchange1->ExchangeName, (const char*)(u8"上海期货交易所"));
-	strcpy(exchange2->ExchangeID, "INE");
+	strcpy(exchange2->ExchangeId, "INE");
 	strcpy(exchange2->ExchangeName, (const char*)(u8"上海国际能源交易中心"));
-	strcpy(exchange3->ExchangeID, "CFFEX");
+	strcpy(exchange3->ExchangeId, "CFFEX");
 	strcpy(exchange3->ExchangeName, (const char*)(u8"中国金融期货交易所"));
-	strcpy(exchange4->ExchangeID, "CZCE");
+	strcpy(exchange4->ExchangeId, "CZCE");
 	strcpy(exchange4->ExchangeName, (const char*)(u8"郑州商品期货交易所"));
-	strcpy(exchange5->ExchangeID, "DCE");
+	strcpy(exchange5->ExchangeId, "DCE");
 	strcpy(exchange5->ExchangeName, (const char*)(u8"大连商品期货交易所"));
-	strcpy(exchange6->ExchangeID, "GFE");
+	strcpy(exchange6->ExchangeId, "GFE");
 	strcpy(exchange6->ExchangeName, (const char*)(u8"广期所"));
 
 	exchanges->push_back(exchange1);
@@ -65,18 +65,18 @@ list<Exchange*>* PrepareExchanges()
 	exchanges->push_back(exchange6);
 	return exchanges;
 }
-Account* PrepareAccount(const char* accountID, const char* accountName, const char* password)
+Account* PrepareAccount(const char* accountId, const char* accountName, const char* password)
 {
 	Account* account = new Account();
 	memset(account, 0, sizeof(Account));
-	strcpy(account->AccountID, accountID);
+	strcpy(account->AccountId, accountId);
 	strcpy(account->AccountName, accountName);
 	account->AccountType = AccountTypeType::Primary;
 	account->AccountStatus = AccountStatusType::Normal;
 	strcpy(account->Password, "123456");
-	account->TradeGroupID = 10000;
-	account->RiskGroupID = 10000;
-	account->CommissionGroupID = 10000;
+	account->TradeGroupId = 10000;
+	account->RiskGroupId = 10000;
+	account->CommissionGroupId = 10000;
 	return account;
 }
 
@@ -208,7 +208,7 @@ namespace mdb
     {
     public:
         char TradingDay[9];
-        char InstrumentID[16];
+        char InstrumentId[16];
         double LastPrice;
         double PreClosePrice;
         long long Volume;
@@ -222,7 +222,7 @@ namespace mdb
 
     static const FieldDescriptor TestTickRowFields[] = {
         {"TradingDay",    FieldType::Char,   offsetof(TestTickRow, TradingDay),    sizeof(TestTickRow::TradingDay)},
-        {"InstrumentID",  FieldType::Char,   offsetof(TestTickRow, InstrumentID),  sizeof(TestTickRow::InstrumentID)},
+        {"InstrumentId",  FieldType::Char,   offsetof(TestTickRow, InstrumentId),  sizeof(TestTickRow::InstrumentId)},
         {"LastPrice",     FieldType::Double, offsetof(TestTickRow, LastPrice),     0},
         {"PreClosePrice", FieldType::Double, offsetof(TestTickRow, PreClosePrice), 0},
         {"Volume",        FieldType::Int64,  offsetof(TestTickRow, Volume),        0},
@@ -248,7 +248,7 @@ static void TestDuckdbVectorized()
     DuckdbWrapper* duckdb = new DuckdbWrapper(":memory:");
     WriteLog(LogLevel::Info, "TestDB with DuckdbVectorized");
 
-    duckdb->Exec("CREATE TABLE t_test_tick (TradingDay VARCHAR, InstrumentID VARCHAR, "
+    duckdb->Exec("CREATE TABLE t_test_tick (TradingDay VARCHAR, InstrumentId VARCHAR, "
                  "LastPrice DECIMAL(24,8), PreClosePrice DOUBLE, Volume BIGINT, "
                  "BarPeriod INTEGER, IsValid BOOLEAN);");
     duckdb->Exec("INSERT INTO t_test_tick VALUES "
@@ -265,7 +265,7 @@ static void TestDuckdbVectorized()
 
     std::vector<TestTickRow*> records;
     std::string error = duckdb->SelectWithSqlVectorized(
-        "SELECT TradingDay, InstrumentID, LastPrice, PreClosePrice, Volume, BarPeriod, IsValid "
+        "SELECT TradingDay, InstrumentId, LastPrice, PreClosePrice, Volume, BarPeriod, IsValid "
         "FROM t_test_tick ORDER BY TradingDay;",
         &TestTickRow::GetSchema(), &records, factory);
 
@@ -282,13 +282,13 @@ static void TestDuckdbVectorized()
         auto& row0 = *records[0];
         auto& row1 = *records[1];
         bool pass = strcmp(row0.TradingDay, "20260101") == 0
-            && strcmp(row0.InstrumentID, "rb2610") == 0
+            && strcmp(row0.InstrumentId, "rb2610") == 0
             && row0.LastPrice == 1234.5
             && row0.PreClosePrice == 1200.0
             && row0.Volume == 100
             && row0.BarPeriod == 60
             && row0.IsValid
-            && strcmp(row1.InstrumentID, "rb2611") == 0
+            && strcmp(row1.InstrumentId, "rb2611") == 0
             && row1.LastPrice == 1250.25
             && row1.PreClosePrice == std::numeric_limits<double>::infinity()
             && row1.Volume == 200
@@ -304,7 +304,7 @@ static void TestDuckdbVectorized()
             {
                 WriteLog(LogLevel::Error,
                     "row: day=%s inst=%s last=%f preclose=%f vol=%lld period=%d valid=%d",
-                    record->TradingDay, record->InstrumentID, record->LastPrice,
+                    record->TradingDay, record->InstrumentId, record->LastPrice,
                     record->PreClosePrice, record->Volume, record->BarPeriod,
                     record->IsValid ? 1 : 0);
             }

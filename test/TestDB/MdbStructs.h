@@ -2,7 +2,7 @@
 #include <DBAdapters/DBInterface/Schema.h>
 #include <Spark/Types.h>
 
-using dbadapters::TableSchema;
+using DbAdapters::TableSchema;
 namespace mdb
 {
 	class TradingDay
@@ -28,7 +28,7 @@ namespace mdb
 	public:
 		static constexpr unsigned int TableID = 0x0002;
 		//交易所代码
-		ExchangeIDType ExchangeID;
+		ExchangeIdType ExchangeId;
 		//交易所名称
 		ExchangeNameType ExchangeName;
 		
@@ -44,9 +44,9 @@ namespace mdb
 	public:
 		static constexpr unsigned int TableID = 0x0003;
 		//交易所代码
-		ExchangeIDType ExchangeID;
+		ExchangeIdType ExchangeId;
 		//品种代码
-		ProductIDType ProductID;
+		ProductIdType ProductId;
 		//品种名称
 		ProductNameType ProductName;
 		//品种类型
@@ -78,15 +78,15 @@ namespace mdb
 	public:
 		static constexpr unsigned int TableID = 0x0004;
 		//交易所代码
-		ExchangeIDType ExchangeID;
+		ExchangeIdType ExchangeId;
 		//合约代码
-		InstrumentIDType InstrumentID;
+		InstrumentIdType InstrumentId;
 		//交易所合约代码
-		InstrumentIDType ExchangeInstID;
+		InstrumentIdType ExchangeInstId;
 		//合约名称
 		InstrumentNameType InstrumentName;
 		//品种代码
-		ProductIDType ProductID;
+		ProductIdType ProductId;
 		//品种类型
 		ProductClassType ProductClass;
 		//合约类别
@@ -120,7 +120,7 @@ namespace mdb
 	public:
 		static constexpr unsigned int TableID = 0x0005;
 		//主账户代码
-		AccountIDType PrimaryAccountID;
+		AccountIdType PrimaryAccountId;
 		//主账户名称
 		AccountNameType PrimaryAccountName;
 		//账户类别
@@ -128,7 +128,7 @@ namespace mdb
 		//经纪公司密码
 		PasswordType BrokerPassword;
 		//报盘代码
-		OfferIDType OfferID;
+		OfferIdType OfferId;
 		//是否允许登陆
 		BoolType IsAllowLogin;
 		//是否模拟账号
@@ -150,7 +150,7 @@ namespace mdb
 	public:
 		static constexpr unsigned int TableID = 0x0006;
 		//账户代码
-		AccountIDType AccountID;
+		AccountIdType AccountId;
 		//账户名称
 		AccountNameType AccountName;
 		//账户类型
@@ -160,11 +160,11 @@ namespace mdb
 		//密码
 		PasswordType Password;
 		//交易组代码
-		GroupIDType TradeGroupID;
+		GroupIdType TradeGroupId;
 		//交易组代码
-		GroupIDType RiskGroupID;
+		GroupIdType RiskGroupId;
 		//交易组代码
-		GroupIDType CommissionGroupID;
+		GroupIdType CommissionGroupId;
 		
 		static Account* Allocate();
 		void Deallocate();
@@ -180,7 +180,7 @@ namespace mdb
 		//交易日
 		DateType TradingDay;
 		//账户代码
-		AccountIDType AccountID;
+		AccountIdType AccountId;
 		//账户类型
 		AccountTypeType AccountType;
 		//权益
@@ -232,13 +232,13 @@ namespace mdb
 		//交易日
 		DateType TradingDay;
 		//账户代码
-		AccountIDType AccountID;
+		AccountIdType AccountId;
 		//账户类型
 		AccountTypeType AccountType;
 		//交易所代码
-		ExchangeIDType ExchangeID;
+		ExchangeIdType ExchangeId;
 		//合约代码
-		InstrumentIDType InstrumentID;
+		InstrumentIdType InstrumentId;
 		//品种类型
 		ProductClassType ProductClass;
 		//持仓方向
@@ -294,13 +294,13 @@ namespace mdb
 		//交易日
 		DateType TradingDay;
 		//账户代码
-		AccountIDType AccountID;
+		AccountIdType AccountId;
 		//账户类型
 		AccountTypeType AccountType;
 		//交易所代码
-		ExchangeIDType ExchangeID;
+		ExchangeIdType ExchangeId;
 		//合约代码
-		InstrumentIDType InstrumentID;
+		InstrumentIdType InstrumentId;
 		//品种类型
 		ProductClassType ProductClass;
 		//持仓方向
@@ -308,7 +308,7 @@ namespace mdb
 		//开仓日期
 		DateType OpenDate;
 		//成交编号
-		TradeIDType TradeID;
+		TradeIdType TradeId;
 		//委托数量
 		VolumeType Volume;
 		//开盘价
@@ -356,19 +356,19 @@ namespace mdb
 		//交易日
 		DateType TradingDay;
 		//账户代码
-		AccountIDType AccountID;
+		AccountIdType AccountId;
 		//账户类型
 		AccountTypeType AccountType;
 		//交易所代码
-		ExchangeIDType ExchangeID;
+		ExchangeIdType ExchangeId;
 		//合约代码
-		InstrumentIDType InstrumentID;
+		InstrumentIdType InstrumentId;
 		//品种类型
 		ProductClassType ProductClass;
 		//委托编号
-		OrderIDType OrderID;
+		OrderIdType OrderId;
 		//系统委托编号
-		OrderSysIDType OrderSysID;
+		OrderSysIdType OrderSysId;
 		//买卖方向
 		DirectionType Direction;
 		//开平标志
@@ -396,19 +396,19 @@ namespace mdb
 		//撤单时间
 		TimeType CancelTime;
 		//会话编号
-		SessionIDType SessionID;
+		SessionIdType SessionId;
 		//客户端委托编号
-		ClientOrderIDType ClientOrderID;
+		ClientOrderIdType ClientOrderId;
 		//客户端请求编号
-		RequestIDType RequestID;
+		RequestIdType RequestId;
 		//报盘代码
-		OfferIDType OfferID;
+		OfferIdType OfferId;
 		//交易组代码
-		GroupIDType TradeGroupID;
+		GroupIdType TradeGroupId;
 		//交易组代码
-		GroupIDType RiskGroupID;
+		GroupIdType RiskGroupId;
 		//交易组代码
-		GroupIDType CommissionGroupID;
+		GroupIdType CommissionGroupId;
 		//冻结资金
 		MoneyType FrozenCash;
 		//冻结保证金
@@ -434,21 +434,21 @@ namespace mdb
 		//交易日
 		DateType TradingDay;
 		//账户代码
-		AccountIDType AccountID;
+		AccountIdType AccountId;
 		//账户类型
 		AccountTypeType AccountType;
 		//交易所代码
-		ExchangeIDType ExchangeID;
+		ExchangeIdType ExchangeId;
 		//合约代码
-		InstrumentIDType InstrumentID;
+		InstrumentIdType InstrumentId;
 		//品种类型
 		ProductClassType ProductClass;
 		//委托编号
-		OrderIDType OrderID;
+		OrderIdType OrderId;
 		//系统委托编号
-		OrderSysIDType OrderSysID;
+		OrderSysIdType OrderSysId;
 		//成交编号
-		TradeIDType TradeID;
+		TradeIdType TradeId;
 		//买卖方向
 		DirectionType Direction;
 		//开平标志
@@ -476,17 +476,17 @@ namespace mdb
 		static const TableSchema& GetSchema();
 	};
 
-	extern thread_local TradingDay t_CompareTradingDay;
-	extern thread_local Exchange t_CompareExchange;
-	extern thread_local Product t_CompareProduct;
-	extern thread_local Instrument t_CompareInstrument;
-	extern thread_local PrimaryAccount t_ComparePrimaryAccount;
-	extern thread_local Account t_CompareAccount;
-	extern thread_local Capital t_CompareCapital;
-	extern thread_local Position t_ComparePosition;
-	extern thread_local PositionDetail t_ComparePositionDetail;
-	extern thread_local Order t_CompareOrder;
-	extern thread_local Trade t_CompareTrade;
+	extern thread_local TradingDay CompareTradingDay;
+	extern thread_local Exchange CompareExchange;
+	extern thread_local Product CompareProduct;
+	extern thread_local Instrument CompareInstrument;
+	extern thread_local PrimaryAccount ComparePrimaryAccount;
+	extern thread_local Account CompareAccount;
+	extern thread_local Capital CompareCapital;
+	extern thread_local Position ComparePosition;
+	extern thread_local PositionDetail ComparePositionDetail;
+	extern thread_local Order CompareOrder;
+	extern thread_local Trade CompareTrade;
 
 }
 

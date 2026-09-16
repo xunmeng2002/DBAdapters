@@ -3,7 +3,7 @@
 #include <vector>
 
 
-namespace dbadapters
+namespace DbAdapters
 {
 template<typename T>
 class TypedTable

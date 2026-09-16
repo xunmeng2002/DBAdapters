@@ -5,7 +5,7 @@
 #include <vector>
 
 
-namespace dbadapters
+namespace DbAdapters
 {
 class DB
 {

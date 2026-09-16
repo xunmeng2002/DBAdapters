@@ -49,10 +49,10 @@ Created by [Fireseeker](https://fireseeker.cn/)
 把"内存库变更"异步落盘的关键组件：
 
 - 继承 `Spark::Core::ThreadBase`，后台线程循环消费操作队列
-- 实现 `MdbSubscriber`，将内存库的 `OnRecordInsert / OnRecordBatchInsert / OnRecordErase / ...` 事件封装为 `DBOperate` 投递入队
+- 实现 `MdbSubscriber`，将内存库的 `OnRecordInsert / OnRecordBatchInsert / OnRecordErase / ...` 事件封装为 `DbOperate` 投递入队
 - 建表 / 删表 / 清表以批操作下发，插入支持事务批量（BatchInsert）
 - 断线自动重连，异常操作记录日志并短暂休眠后重试
-- `DBOperate` 走对象池复用，减少高频写库时的内存分配
+- `DbOperate` 走对象池复用，减少高频写库时的内存分配
 
 ### 4. 典型场景
 
@@ -203,14 +203,14 @@ sh Install.sh
 #include <cstring>
 #include <vector>
 
-using namespace dbadapters;
-using namespace spark::core;
+using namespace DbAdapters;
+using namespace Spark::Core;
 
 // 记录结构体：字段的内存布局与 TableSchema 的 FieldDescriptor 一一对应
 struct Account
 {
     static constexpr unsigned int TableID = 0x0001;
-    char AccountID[32];
+    char AccountId[32];
     char AccountName[64];
     int  AccountType;
 
@@ -223,7 +223,7 @@ struct Account
 };
 
 const FieldDescriptor Account::Fields[3] = {
-    {"AccountID",   FieldType::Char, offsetof(Account, AccountID),   sizeof(Account::AccountID)},
+    {"AccountId",   FieldType::Char, offsetof(Account, AccountId),   sizeof(Account::AccountId)},
     {"AccountName", FieldType::Char, offsetof(Account, AccountName), sizeof(Account::AccountName)},
     {"AccountType", FieldType::Int32, offsetof(Account, AccountType), 0},
 };
@@ -255,7 +255,7 @@ int main(int argc, const char* argv[])
     {
         Account record;
         std::memset(&record, 0, sizeof(record));
-        std::strcpy(record.AccountID, "A001");
+        std::strcpy(record.AccountId, "A001");
         std::strcpy(record.AccountName, u8"张三");
         record.AccountType = 1;
         accounts.Insert(record);
@@ -265,7 +265,7 @@ int main(int argc, const char* argv[])
         accounts.SelectAll(rows);                 // 自动生成 SELECT 并填充记录
         for (Account* row : rows)
         {
-            WriteLog(LogLevel::Info, "%s %s", row->AccountID, row->AccountName);
+            WriteLog(LogLevel::Info, "%s %s", row->AccountId, row->AccountName);
         }
     }
 
@@ -282,13 +282,13 @@ int main(int argc, const char* argv[])
 #include <cstring>
 #include <vector>
 
-using namespace dbadapters;
-using namespace spark::core;
+using namespace DbAdapters;
+using namespace Spark::Core;
 
 struct TickRow
 {
     char      TradingDay[9];
-    char      InstrumentID[16];
+    char      InstrumentId[16];
     double    LastPrice;
     double    PreClosePrice;
     long long Volume;
@@ -302,7 +302,7 @@ struct TickRow
 
 static const FieldDescriptor TickRowFields[] = {
     {"TradingDay",    FieldType::Char,   offsetof(TickRow, TradingDay),    sizeof(TickRow::TradingDay)},
-    {"InstrumentID",  FieldType::Char,   offsetof(TickRow, InstrumentID),  sizeof(TickRow::InstrumentID)},
+    {"InstrumentId",  FieldType::Char,   offsetof(TickRow, InstrumentId),  sizeof(TickRow::InstrumentId)},
     {"LastPrice",     FieldType::Double, offsetof(TickRow, LastPrice),     0},
     {"PreClosePrice", FieldType::Double, offsetof(TickRow, PreClosePrice), 0},
     {"Volume",        FieldType::Int64,  offsetof(TickRow, Volume),        0},
@@ -331,7 +331,7 @@ int main()
         return -1;
     }
 
-    db.Exec("CREATE TABLE t_test_tick (TradingDay VARCHAR, InstrumentID VARCHAR, "
+    db.Exec("CREATE TABLE t_test_tick (TradingDay VARCHAR, InstrumentId VARCHAR, "
             "LastPrice DECIMAL(24,8), PreClosePrice DOUBLE, Volume BIGINT, "
             "BarPeriod INTEGER, IsValid BOOLEAN);");
     db.Exec("INSERT INTO t_test_tick VALUES ('20260101', 'rb2610', 1234.5, 1200.0, 100, 60, true);");
@@ -345,7 +345,7 @@ int main()
 
     std::vector<TickRow*> rows;
     std::string error = db.SelectWithSqlVectorized(
-        "SELECT TradingDay, InstrumentID, LastPrice, PreClosePrice, Volume, BarPeriod, IsValid "
+        "SELECT TradingDay, InstrumentId, LastPrice, PreClosePrice, Volume, BarPeriod, IsValid "
         "FROM t_test_tick ORDER BY TradingDay;",
         &TickRow::GetSchema(), &rows, factory);
 
@@ -357,7 +357,7 @@ int main()
     {
         for (TickRow* row : rows)
         {
-            WriteLog(LogLevel::Info, "%s %s last=%.2f", row->TradingDay, row->InstrumentID, row->LastPrice);
+            WriteLog(LogLevel::Info, "%s %s last=%.2f", row->TradingDay, row->InstrumentId, row->LastPrice);
         }
     }
 
@@ -377,8 +377,8 @@ int main()
 #include <DBAdapters/DBInterface/SchemaRegistry.h>
 #include <Spark/Core/Core.h>
 
-using namespace dbadapters;
-using namespace spark::core;
+using namespace DbAdapters;
+using namespace Spark::Core;
 
 // 1) 自定义 SchemaRegistry：按 tableID 反查 schema（Account 定义见示例 1）
 class DemoSchemaRegistry : public SchemaRegistry
@@ -423,7 +423,7 @@ int main()
     // 模拟内存库变更：业务代码在数据变化时回调 MdbSubscriber 接口
     Account record;
     std::memset(&record, 0, sizeof(record));
-    std::strcpy(record.AccountID, "A002");
+    std::strcpy(record.AccountId, "A002");
     writer.OnRecordInsert(Account::TableID, &record);   // 入队 → 后台线程异步落库
 
     writer.Stop();
@@ -466,7 +466,7 @@ int main()
 ## 九、补充说明
 
 - **包含路径**：头文件统一使用 `#include <DBAdapters/Module/HeaderName.h>` 风格
-- **命名空间**：全部接口位于 `dbadapters` 命名空间
-- **依赖 Spark**：线程、日志、对象池、`DBOperateType` 等类型定义来自 [Spark](https://gitee.com/xunmeng2002/Spark.git) 基础库
+- **命名空间**：全部接口位于 `DbAdapters` 命名空间
+- **依赖 Spark**：线程、日志、对象池、`DbOperateType` 等类型定义来自 [Spark](https://gitee.com/xunmeng2002/Spark.git) 基础库
 - **跨库差异**：MySQL 使用 MyISAM 引擎与 `utf8mb4_bin` 排序规则；DuckDB 的 `TruncateTable` 实际执行 `DELETE FROM`；SQLite / DuckDB 单文件库与内存库（`:memory:`）均可直接使用
 - **切换后端**：同一套 `TableSchema` 与业务代码可直接在四种数据库间切换，仅需替换适配器构造参数

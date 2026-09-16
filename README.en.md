@@ -49,10 +49,10 @@ All four adapters inherit the unified `DB` interface — switching databases onl
 The key component that flushes "in-memory database changes" to disk asynchronously:
 
 - Inherits `Spark::Core::ThreadBase`; a background thread loops over the operation queue
-- Implements `MdbSubscriber`, wrapping the in-memory database's `OnRecordInsert / OnRecordBatchInsert / OnRecordErase / ...` events into `DBOperate` items and enqueueing them
+- Implements `MdbSubscriber`, wrapping the in-memory database's `OnRecordInsert / OnRecordBatchInsert / OnRecordErase / ...` events into `DbOperate` items and enqueueing them
 - Create / drop / truncate are dispatched as batch operations; inserts support transactional batches (`BatchInsert`)
 - Auto-reconnects on disconnect; failed operations are logged and retried after a short sleep
-- `DBOperate` objects are pooled to reduce memory allocation during high-frequency writes
+- `DbOperate` objects are pooled to reduce memory allocation during high-frequency writes
 
 ### 2.4 Typical Scenario
 
@@ -203,14 +203,14 @@ sh Install.sh
 #include <cstring>
 #include <vector>
 
-using namespace dbadapters;
-using namespace spark::core;
+using namespace DbAdapters;
+using namespace Spark::Core;
 
 // Record struct: field memory layout must match the FieldDescriptors of the TableSchema
 struct Account
 {
     static constexpr unsigned int TableID = 0x0001;
-    char AccountID[32];
+    char AccountId[32];
     char AccountName[64];
     int  AccountType;
 
@@ -223,7 +223,7 @@ struct Account
 };
 
 const FieldDescriptor Account::Fields[3] = {
-    {"AccountID",   FieldType::Char, offsetof(Account, AccountID),   sizeof(Account::AccountID)},
+    {"AccountId",   FieldType::Char, offsetof(Account, AccountId),   sizeof(Account::AccountId)},
     {"AccountName", FieldType::Char, offsetof(Account, AccountName), sizeof(Account::AccountName)},
     {"AccountType", FieldType::Int32, offsetof(Account, AccountType), 0},
 };
@@ -255,7 +255,7 @@ int main(int argc, const char* argv[])
     {
         Account record;
         std::memset(&record, 0, sizeof(record));
-        std::strcpy(record.AccountID, "A001");
+        std::strcpy(record.AccountId, "A001");
         std::strcpy(record.AccountName, "Alice");
         record.AccountType = 1;
         accounts.Insert(record);
@@ -265,7 +265,7 @@ int main(int argc, const char* argv[])
         accounts.SelectAll(rows);                 // Auto-generates SELECT and fills the records
         for (Account* row : rows)
         {
-            WriteLog(LogLevel::Info, "%s %s", row->AccountID, row->AccountName);
+            WriteLog(LogLevel::Info, "%s %s", row->AccountId, row->AccountName);
         }
     }
 
@@ -282,13 +282,13 @@ int main(int argc, const char* argv[])
 #include <cstring>
 #include <vector>
 
-using namespace dbadapters;
-using namespace spark::core;
+using namespace DbAdapters;
+using namespace Spark::Core;
 
 struct TickRow
 {
     char      TradingDay[9];
-    char      InstrumentID[16];
+    char      InstrumentId[16];
     double    LastPrice;
     double    PreClosePrice;
     long long Volume;
@@ -302,7 +302,7 @@ struct TickRow
 
 static const FieldDescriptor TickRowFields[] = {
     {"TradingDay",    FieldType::Char,   offsetof(TickRow, TradingDay),    sizeof(TickRow::TradingDay)},
-    {"InstrumentID",  FieldType::Char,   offsetof(TickRow, InstrumentID),  sizeof(TickRow::InstrumentID)},
+    {"InstrumentId",  FieldType::Char,   offsetof(TickRow, InstrumentId),  sizeof(TickRow::InstrumentId)},
     {"LastPrice",     FieldType::Double, offsetof(TickRow, LastPrice),     0},
     {"PreClosePrice", FieldType::Double, offsetof(TickRow, PreClosePrice), 0},
     {"Volume",        FieldType::Int64,  offsetof(TickRow, Volume),        0},
@@ -331,7 +331,7 @@ int main()
         return -1;
     }
 
-    db.Exec("CREATE TABLE t_test_tick (TradingDay VARCHAR, InstrumentID VARCHAR, "
+    db.Exec("CREATE TABLE t_test_tick (TradingDay VARCHAR, InstrumentId VARCHAR, "
             "LastPrice DECIMAL(24,8), PreClosePrice DOUBLE, Volume BIGINT, "
             "BarPeriod INTEGER, IsValid BOOLEAN);");
     db.Exec("INSERT INTO t_test_tick VALUES ('20260101', 'rb2610', 1234.5, 1200.0, 100, 60, true);");
@@ -345,7 +345,7 @@ int main()
 
     std::vector<TickRow*> rows;
     std::string error = db.SelectWithSqlVectorized(
-        "SELECT TradingDay, InstrumentID, LastPrice, PreClosePrice, Volume, BarPeriod, IsValid "
+        "SELECT TradingDay, InstrumentId, LastPrice, PreClosePrice, Volume, BarPeriod, IsValid "
         "FROM t_test_tick ORDER BY TradingDay;",
         &TickRow::GetSchema(), &rows, factory);
 
@@ -357,7 +357,7 @@ int main()
     {
         for (TickRow* row : rows)
         {
-            WriteLog(LogLevel::Info, "%s %s last=%.2f", row->TradingDay, row->InstrumentID, row->LastPrice);
+            WriteLog(LogLevel::Info, "%s %s last=%.2f", row->TradingDay, row->InstrumentId, row->LastPrice);
         }
     }
 
@@ -377,8 +377,8 @@ int main()
 #include <DBAdapters/DBInterface/SchemaRegistry.h>
 #include <Spark/Core/Core.h>
 
-using namespace dbadapters;
-using namespace spark::core;
+using namespace DbAdapters;
+using namespace Spark::Core;
 
 // 1) Custom SchemaRegistry: look up a schema by table ID (Account defined in Example 1)
 class DemoSchemaRegistry : public SchemaRegistry
@@ -423,7 +423,7 @@ int main()
     // Simulate in-memory database changes: business code calls the MdbSubscriber interface
     Account record;
     std::memset(&record, 0, sizeof(record));
-    std::strcpy(record.AccountID, "A002");
+    std::strcpy(record.AccountId, "A002");
     writer.OnRecordInsert(Account::TableID, &record);   // Enqueued → persisted by the background thread
 
     writer.Stop();
@@ -466,7 +466,7 @@ The project ships the **test/TestDB** integration test program covering all four
 ## 9. Additional Notes
 
 - **Include style**: headers use the `#include <DBAdapters/Module/HeaderName.h>` convention
-- **Namespace**: all interfaces live in the `dbadapters` namespace
-- **Spark dependency**: threading, logging, object pooling, and type definitions such as `DBOperateType` come from the [Spark](https://gitee.com/xunmeng2002/Spark.git) foundational library
+- **Namespace**: all interfaces live in the `DbAdapters` namespace
+- **Spark dependency**: threading, logging, object pooling, and type definitions such as `DbOperateType` come from the [Spark](https://gitee.com/xunmeng2002/Spark.git) foundational library
 - **Cross-database differences**: MySQL uses the MyISAM engine with the `utf8mb4_bin` collation; DuckDB's `TruncateTable` actually executes `DELETE FROM`; SQLite / DuckDB file-based and in-memory (`:memory:`) databases can both be used directly
 - **Switching backends**: the same `TableSchema` and business code can switch between all four databases by simply changing the adapter constructor arguments

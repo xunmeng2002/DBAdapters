@@ -4,7 +4,7 @@
 #include <string>
 
 
-namespace dbadapters
+namespace DbAdapters
 {
 class SQLITEWRAPPER_EXPORTS SqliteWrapper : public DB
 {

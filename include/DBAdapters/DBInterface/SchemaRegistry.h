@@ -2,7 +2,7 @@
 #include <DBAdapters/DBInterface/Schema.h>
 
 
-namespace dbadapters
+namespace DbAdapters
 {
 class SchemaRegistry
 {

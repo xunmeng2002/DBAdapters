@@ -4,7 +4,7 @@
 #include <limits>
 #include <type_traits>
 
-namespace dbadapters
+namespace DbAdapters
 {
 //FieldType 描述的是"对内存 record 的带类型视图"，不是 DB 列宽：四个 Wrapper 都按
 //(const char*)record + offset 定位，再按此类型定长读写，两个方向都是 sizeof(FieldType 对应类型) 字节。

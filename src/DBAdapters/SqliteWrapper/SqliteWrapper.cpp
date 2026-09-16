@@ -11,9 +11,9 @@
 #include <sstream>
 
 
-namespace dbadapters
+namespace DbAdapters
 {
-    using spark::core::LogLevel;
+    using Spark::Core::LogLevel;
 
     class StatementGuard
     {

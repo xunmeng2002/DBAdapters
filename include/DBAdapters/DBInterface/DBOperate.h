@@ -1,17 +1,17 @@
 #pragma once
 #include <Spark/Types.h>
 
-namespace dbadapters
+namespace DbAdapters
 {
-class DBOperate
+class DbOperate
 {
 public:
-	static DBOperate* Allocate();
+	static DbOperate* Allocate();
 	virtual void Deallocate() = 0;
 	virtual void DeallocateRecord() = 0;
 
 
-	DBOperateType Operate;
+	DbOperateType Operate;
 	unsigned int TableID;
 	unsigned int IndexID;
 	void* Record;

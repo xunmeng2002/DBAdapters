@@ -1,12 +1,12 @@
 #pragma once
 #include <DBAdapters/DBInterface/SchemaRegistry.h>
-#include <DBAdapters/DBInterface/DBOperate.h>
+#include <DBAdapters/DBInterface/DbOperate.h>
 #include <vector>
 
 
-namespace dbadapters
+namespace DbAdapters
 {
-class DBOperateImpl : public DBOperate
+class DBOperateImpl : public DbOperate
 {
 public:
     void SetSchemaRegistry(SchemaRegistry* registry) { schema_registry_ = registry; }

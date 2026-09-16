@@ -1,10 +1,10 @@
 #pragma once
-#include <DBAdapters/DBInterface/DBOperate.h>
+#include <DBAdapters/DBInterface/DbOperate.h>
 #include <atomic>
 #include <vector>
 
 
-namespace dbadapters
+namespace DbAdapters
 {
 class MdbSubscriber
 {
@@ -15,7 +15,7 @@ public:
 	}
 	virtual ~MdbSubscriber() = default;
 
-	virtual void OnTableOp(DBOperateType op) {}
+	virtual void OnTableOp(DbOperateType op) {}
 	virtual void OnRecordInsert(unsigned int tableID, void* record) {}
 	virtual void OnRecordBatchInsert(unsigned int tableID, std::vector<const void*>* records) {}
 	virtual void OnRecordErase(unsigned int tableID, void* record) {}

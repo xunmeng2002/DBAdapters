@@ -15,7 +15,7 @@
 
 ## ❓ 待讨论 / 待决策
 
-- **DBAdapters 遗留项（2026-09-12 复查，均未改）**：① 未连接期间 `AsyncDBWriter` 队列只积压不丢弃，长时间断库会无界增长（内存）；② `HandleDBOperate` 的 catch 路径中 `m_DB->DisConnect()` 与 `DeallocateRecord`/`Deallocate` 若再抛异常会逃出 `Run()` 直达 `std::terminate`（catch 内未再包一层）；③ `DBOperate::DeallocateRecord()` 对 Insert/BatchInsert/Truncate 早退（记录泄漏，既有）；④ `MysqlWrapper::Connect()` 仍恒真（`m_Impl != nullptr`，close 后照旧为真），写库线程不会重连；⑤ 尚未 `cmake --install` 到 `../Libs/DBAdapters/x64-windows`（会改动 QuantTrading 的依赖树与运行时 DLL），待决定；⑥ `DBAdaptersConfig.cmake` 未 `find_dependency(Spark)`，安装后消费方需自行保证 `Spark::Core` 可用。
+- **DBAdapters 遗留项（2026-09-12 复查，均未改）**：① 未连接期间 `AsyncDBWriter` 队列只积压不丢弃，长时间断库会无界增长（内存）；② `HandleDBOperate` 的 catch 路径中 `m_DB->DisConnect()` 与 `DeallocateRecord`/`Deallocate` 若再抛异常会逃出 `Run()` 直达 `std::terminate`（catch 内未再包一层）；③ `DbOperate::DeallocateRecord()` 对 Insert/BatchInsert/Truncate 早退（记录泄漏，既有）；④ `MysqlWrapper::Connect()` 仍恒真（`m_Impl != nullptr`，close 后照旧为真），写库线程不会重连；⑤ 尚未 `cmake --install` 到 `../Libs/DBAdapters/x64-windows`（会改动 QuantTrading 的依赖树与运行时 DLL），待决定；⑥ `DBAdaptersConfig.cmake` 未 `find_dependency(Spark)`，安装后消费方需自行保证 `Spark::Core` 可用。
 - README 落款沿用 Spark 的 "Created by [Fireseeker]"（两仓库 LICENSE 同为 xunmeng2002）——如需调整署名请告知。
 - 构建依赖 Spark 与 duckdb 为**预编译库**（`../Libs/Spark/<triplet>`、`../Libs/duckdb/<triplet>`），`vcpkg.json` 未声明这两者；后续若考虑可复现构建，可讨论是否将 duckdb 纳入 vcpkg 管理。
 - `test/TestDB` 中 MySQL / MariaDB 测试默认注释关闭（需本地服务），如要常开可配置 CI。

@@ -2,11 +2,11 @@
 #include <Spark/TemplateLib/TemplateLib.h>
 #include <cstring>
 
-using namespace spark;
+using namespace Spark;
 
-namespace dbadapters
+namespace DbAdapters
 {
-DBOperate* DBOperate::Allocate()
+DbOperate* DbOperate::Allocate()
 {
 	return ObjectPool<DBOperateImpl>::GetInstance().Allocate();
 }
@@ -17,7 +17,7 @@ void DBOperateImpl::Deallocate()
 }
 void DBOperateImpl::DeallocateRecord()
 {
-	if (Operate == DBOperateType::Insert || Operate == DBOperateType::BatchInsert || Operate == DBOperateType::Truncate)
+	if (Operate == DbOperateType::Insert || Operate == DbOperateType::BatchInsert || Operate == DbOperateType::Truncate)
 	{
 		return;
 	}

@@ -4,7 +4,7 @@
 #include <string>
 
 
-namespace dbadapters
+namespace DbAdapters
 {
 class DUCKDBWRAPPER_EXPORTS DuckdbWrapper : public DB
 {

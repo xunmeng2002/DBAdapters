@@ -1,7 +1,7 @@
 #pragma once
 #include <Spark/Core/Logger/Logger.h>
 
-namespace dbadapters
+namespace DbAdapters
 {
     // 逐记录写操作（Insert/Update/Delete）失败时会连续重复上万次（BatchInsert 内每条记录一次），
     // 因此失败上报必须节流：首次上报完整详情，其后每 reportInterval 次上报一次并附带累计失败次数，
@@ -45,7 +45,7 @@ namespace dbadapters
         {
             return;
         }
-        WriteLog(spark::core::LogLevel::Error,
+        WriteLog(Spark::Core::LogLevel::Error,
             "%s: %s failed. Table:%s, Error:%s, FailureCount:%d",
             wrapperName, operationName, tableName, errorDetail, failureCount);
     }
