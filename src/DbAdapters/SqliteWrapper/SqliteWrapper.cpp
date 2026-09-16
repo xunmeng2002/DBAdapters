@@ -69,8 +69,7 @@ namespace DbAdapters
 	    }
     }
 
-    void BindField(sqlite3_stmt* stmt, int index, const FieldDescriptor& field, const void* record,
-                   int& clampedCount)
+    void BindField(sqlite3_stmt* stmt, int index, const FieldDescriptor& field, const void* record, int& clampedCount)
     {
 	    const char* data = static_cast<const char*>(record) + field.offset;
 	    switch (field.type)
@@ -96,16 +95,14 @@ namespace DbAdapters
 		    break;
 	    }
     }
-    void BindFields(sqlite3_stmt* stmt, const TableSchema* schema, const void* record,
-                    int& clampedCount)
+    void BindFields(sqlite3_stmt* stmt, const TableSchema* schema, const void* record, int& clampedCount)
     {
 	    for (int i = 0; i < schema->fieldCount; ++i)
 	    {
 		    BindField(stmt, i + 1, schema->fields[i], record, clampedCount);
 	    }
     }
-    void BindKeyFields(sqlite3_stmt* stmt, const TableSchema* schema, const void* record, const int* keyIndices, int keyCount,
-                       int& clampedCount)
+    void BindKeyFields(sqlite3_stmt* stmt, const TableSchema* schema, const void* record, const int* keyIndices, int keyCount, int& clampedCount)
     {
 	    for (int i = 0; i < keyCount; ++i)
 	    {
@@ -158,8 +155,7 @@ namespace DbAdapters
     }
 
     // 收窄饱和在一次操作结束后汇总上报一条 Warning：逐格上报会被行数淹没。
-    void LogClampedCells(const char* operationName, const TableSchema* schema,
-                         int clampedCount, int totalCellCount)
+    void LogClampedCells(const char* operationName, const TableSchema* schema, int clampedCount, int totalCellCount)
     {
 	    if (clampedCount > 0)
 	    {
@@ -170,8 +166,7 @@ namespace DbAdapters
     }
 
     // 读语句到 EOF，把所有行交给 factory，返回最后一次 step 的返回码供调用方判错。
-    int ReadStatementRows(sqlite3_stmt* stmt, const TableSchema* schema, void* recordsList,
-                          const RecordFactory& factory)
+    int ReadStatementRows(sqlite3_stmt* stmt, const TableSchema* schema, void* recordsList, const RecordFactory& factory)
     {
 	    int clampedCount = 0;
 	    int totalRowCount = 0;
@@ -260,7 +255,7 @@ void SqliteWrapper::Exec(const char* sql)
 void SqliteWrapper::CreateTable(const TableSchema* schema)
 {
 	std::ostringstream sql;
-	sql << "CREATE TABLE IF NOT EXISTS " << schema->tableName << "(";
+	sql << "CREATE TABLE IF NOT EXISTS \"" << schema->tableName << "\"(";
 	for (int i = 0; i < schema->fieldCount; ++i)
 	{
 		if (i > 0) sql << ", ";
@@ -296,16 +291,16 @@ void SqliteWrapper::CreateTable(const TableSchema* schema)
 }
 void SqliteWrapper::DropTable(const char* tableName)
 {
-	std::string sql = "DROP TABLE IF EXISTS ";
+	std::string sql = "DROP TABLE IF EXISTS \"";
 	sql += tableName;
-	sql += ";";
+	sql += "\";";
 	Exec(sql.c_str());
 }
 void SqliteWrapper::TruncateTable(const char* tableName)
 {
-	std::string sql = "DELETE FROM ";
+	std::string sql = "DELETE FROM \"";
 	sql += tableName;
-	sql += ";";
+	sql += "\";";
 	Exec(sql.c_str());
 }
 
@@ -334,7 +329,7 @@ void SqliteWrapper::TruncateTables(const TableSchema* const* schemas, int count)
 void SqliteWrapper::Insert(const TableSchema* schema, const void* record)
 {
 	std::ostringstream sql;
-	sql << "INSERT INTO " << schema->tableName << " (";
+	sql << "INSERT INTO \"" << schema->tableName << "\" (";
 	for (int i = 0; i < schema->fieldCount; ++i)
 	{
 		if (i > 0) sql << ", ";
@@ -356,8 +351,7 @@ void SqliteWrapper::Insert(const TableSchema* schema, const void* record)
 	StatementGuard stmt(impl_->db, sql.str().c_str());
 	if (!stmt.IsValid())
 	{
-		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "INSERT", schema->tableName,
-			sqlite3_errmsg(impl_->db));
+		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "INSERT", schema->tableName, sqlite3_errmsg(impl_->db));
 		return;
 	}
 	int clampedCount = 0;
@@ -365,8 +359,7 @@ void SqliteWrapper::Insert(const TableSchema* schema, const void* record)
 	const int rc = stmt.Step();
 	if (rc != SQLITE_DONE)
 	{
-		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "INSERT", schema->tableName,
-			sqlite3_errmsg(impl_->db));
+		LogOperationFailure(impl_->failureLogThrottle, "SqliteWrapper", "INSERT", schema->tableName, sqlite3_errmsg(impl_->db));
 	}
 	LogClampedCells("INSERT", schema, clampedCount, schema->fieldCount);
 }
@@ -390,7 +383,7 @@ void SqliteWrapper::BatchInsert(const TableSchema* schema, const void* const* re
 void SqliteWrapper::Update(const TableSchema* schema, const void* record)
 {
 	std::ostringstream sql;
-	sql << "UPDATE " << schema->tableName << " SET ";
+	sql << "UPDATE \"" << schema->tableName << "\" SET ";
 	for (int i = 0; i < schema->fieldCount; ++i)
 	{
 		if (i > 0) sql << ", ";
@@ -440,7 +433,7 @@ void SqliteWrapper::Update(const TableSchema* schema, const void* record)
 void SqliteWrapper::Delete(const TableSchema* schema, const void* record, const int* keyFieldIndices, int keyFieldCount)
 {
 	std::ostringstream sql;
-	sql << "DELETE FROM " << schema->tableName << " WHERE ";
+	sql << "DELETE FROM \"" << schema->tableName << "\" WHERE ";
 	for (int i = 0; i < keyFieldCount; ++i)
 	{
 		if (i > 0) sql << " AND ";
@@ -473,9 +466,9 @@ void SqliteWrapper::Delete(const TableSchema* schema, const void* record, const 
 
 void SqliteWrapper::SelectAll(const TableSchema* schema, void* recordsList, const RecordFactory& factory)
 {
-	std::string sql = "SELECT * FROM ";
+	std::string sql = "SELECT * FROM \"";
 	sql += schema->tableName;
-	sql += ";";
+	sql += "\";";
 
 	if (impl_->db == nullptr)
 	{

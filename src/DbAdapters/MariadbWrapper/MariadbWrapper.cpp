@@ -141,8 +141,7 @@ namespace DbAdapters
         return sql.str();
     }
 
-    std::string MakeDeleteSql(const TableSchema* schema,
-                               const int* keyFieldIndices, int keyFieldCount)
+    std::string MakeDeleteSql(const TableSchema* schema, const int* keyFieldIndices, int keyFieldCount)
     {
         std::ostringstream sql;
         sql << "DELETE FROM `" << schema->tableName << "` WHERE ";
@@ -155,8 +154,7 @@ namespace DbAdapters
         return sql.str();
     }
 
-    void ReadRow(sql::ResultSet* result, const TableSchema* schema, void* record,
-                 int& clampedCount)
+    void ReadRow(sql::ResultSet* result, const TableSchema* schema, void* record, int& clampedCount)
     {
         char* data = static_cast<char*>(record);
         for (int i = 0; i < schema->fieldCount; ++i)
@@ -206,15 +204,13 @@ namespace DbAdapters
     {
         if (clampedCount > 0)
         {
-            WriteLog(LogLevel::Warning,
-                "MariadbWrapper: SELECT narrowed out-of-range values. Table:%s, ClampedCells:%d/%d",
+            WriteLog(LogLevel::Warning, "MariadbWrapper: SELECT narrowed out-of-range values. Table:%s, ClampedCells:%d/%d",
                 schema->tableName, clampedCount, totalRowCount * schema->fieldCount);
         }
     }
 
     // 把结果集里的全部行交给 factory。写入侧不会饱和：窄化交给列类型，越界由服务器报错抛出。
-    void ReadResultRows(sql::ResultSet* result, const TableSchema* schema, void* recordsList,
-                        const RecordFactory& factory)
+    void ReadResultRows(sql::ResultSet* result, const TableSchema* schema, void* recordsList, const RecordFactory& factory)
     {
         int clampedCount = 0;
         int totalRowCount = 0;
@@ -298,8 +294,7 @@ bool MariadbWrapper::Connect()
     // 直达 std::terminate，故在此转为返回 false，交由写库线程按连接失败重试并上报
     try
     {
-        impl_->m_DBConnection.reset(
-            impl_->m_Driver->connect(host_, user_, passwd_));
+        impl_->m_DBConnection.reset(impl_->m_Driver->connect(host_, user_, passwd_));
     }
     catch (const std::exception& e)
     {
@@ -318,8 +313,7 @@ void MariadbWrapper::Exec(const char* sql)
 {
     if (!impl_->m_Statement)
     {
-        impl_->m_Statement.reset(
-            impl_->m_DBConnection->createStatement());
+        impl_->m_Statement.reset(impl_->m_DBConnection->createStatement());
     }
     impl_->m_Statement->executeUpdate(sql);
 }
@@ -366,8 +360,7 @@ void MariadbWrapper::TruncateTables(const TableSchema* const* schemas, int count
 void MariadbWrapper::Insert(const TableSchema* schema, const void* record)
 {
     std::string sql = MakeInsertSql(schema);
-    auto pstmt = std::unique_ptr<sql::PreparedStatement, SqlPreparedStatementDeleter>(
-        impl_->m_DBConnection->prepareStatement(sql));
+    auto pstmt = std::unique_ptr<sql::PreparedStatement, SqlPreparedStatementDeleter>(impl_->m_DBConnection->prepareStatement(sql));
     for (int i = 0; i < schema->fieldCount; ++i)
         BindField(pstmt.get(), i + 1, schema->fields[i], record);
     pstmt->executeUpdate();
@@ -384,8 +377,7 @@ void MariadbWrapper::BatchInsert(const TableSchema* schema, const void* const* r
 void MariadbWrapper::Update(const TableSchema* schema, const void* record)
 {
     std::string sql = MakeUpdateSql(schema);
-    auto pstmt = std::unique_ptr<sql::PreparedStatement, SqlPreparedStatementDeleter>(
-        impl_->m_DBConnection->prepareStatement(sql));
+    auto pstmt = std::unique_ptr<sql::PreparedStatement, SqlPreparedStatementDeleter>(impl_->m_DBConnection->prepareStatement(sql));
     int paramIndex = 1;
     for (int i = 0; i < schema->fieldCount; ++i)
         BindField(pstmt.get(), paramIndex++, schema->fields[i], record);
@@ -397,19 +389,15 @@ void MariadbWrapper::Update(const TableSchema* schema, const void* record)
     pstmt->executeUpdate();
 }
 
-void MariadbWrapper::Delete(const TableSchema* schema, const void* record,
-                              const int* keyFieldIndices, int keyFieldCount)
+void MariadbWrapper::Delete(const TableSchema* schema, const void* record, const int* keyFieldIndices, int keyFieldCount)
 {
     std::string sql = MakeDeleteSql(schema, keyFieldIndices, keyFieldCount);
-    auto pstmt = std::unique_ptr<sql::PreparedStatement, SqlPreparedStatementDeleter>(
-        impl_->m_DBConnection->prepareStatement(sql));
+    auto pstmt = std::unique_ptr<sql::PreparedStatement, SqlPreparedStatementDeleter>(impl_->m_DBConnection->prepareStatement(sql));
     for (int i = 0; i < keyFieldCount; ++i)
         BindField(pstmt.get(), i + 1, schema->fields[keyFieldIndices[i]], record);
     pstmt->executeUpdate();
 }
-
-void MariadbWrapper::SelectAll(const TableSchema* schema, void* recordsList,
-                                 const RecordFactory& factory)
+void MariadbWrapper::SelectAll(const TableSchema* schema, void* recordsList, const RecordFactory& factory)
 {
     std::string sql = "SELECT * FROM `";
     sql += schema->tableName;
@@ -417,24 +405,18 @@ void MariadbWrapper::SelectAll(const TableSchema* schema, void* recordsList,
 
     if (!impl_->m_Statement)
     {
-        impl_->m_Statement.reset(
-            impl_->m_DBConnection->createStatement());
+        impl_->m_Statement.reset(impl_->m_DBConnection->createStatement());
     }
-    auto result = std::unique_ptr<sql::ResultSet>(
-        impl_->m_Statement->executeQuery(sql));
+    auto result = std::unique_ptr<sql::ResultSet>(impl_->m_Statement->executeQuery(sql));
     ReadResultRows(result.get(), schema, recordsList, factory);
 }
-
-void MariadbWrapper::SelectWithSql(const char* sql, const TableSchema* schema,
-                                     void* recordsList, const RecordFactory& factory)
+void MariadbWrapper::SelectWithSql(const char* sql, const TableSchema* schema, void* recordsList, const RecordFactory& factory)
 {
     if (!impl_->m_Statement)
     {
-        impl_->m_Statement.reset(
-            impl_->m_DBConnection->createStatement());
+        impl_->m_Statement.reset(impl_->m_DBConnection->createStatement());
     }
-    auto result = std::unique_ptr<sql::ResultSet>(
-        impl_->m_Statement->executeQuery(sql));
+    auto result = std::unique_ptr<sql::ResultSet>(impl_->m_Statement->executeQuery(sql));
     ReadResultRows(result.get(), schema, recordsList, factory);
 }
 }

@@ -3,10 +3,10 @@
 
 namespace DbAdapters
 {
-class DBSubscriber
+class DbSubscriber
 {
 public:
-	virtual void OnDBConnected() = 0;
-	virtual void OnDBDisConnected() = 0;
+	virtual void OnDbConnected() = 0;
+	virtual void OnDbDisConnected() = 0;
 };
 }

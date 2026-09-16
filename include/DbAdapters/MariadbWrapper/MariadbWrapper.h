@@ -1,13 +1,13 @@
 #pragma once
 #include <DBAdapters/MariadbWrapper/MariadbWrapperExport.h>
-#include <DBAdapters/DBInterface/DB.h>
+#include <DBAdapters/DBInterface/Db.h>
 #include <string>
 #include <memory>
 
 
 namespace DbAdapters
 {
-class MARIADBWRAPPER_EXPORTS MariadbWrapper : public DB
+class MARIADBWRAPPER_EXPORTS MariadbWrapper : public Db
 {
 public:
     MariadbWrapper(const std::string& host, const std::string& user, const std::string& passwd);

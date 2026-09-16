@@ -37,8 +37,8 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/lib/$<CONFIG>)
  
 message(STATUS "VCPKG_TARGET_TRIPLET = ${VCPKG_TARGET_TRIPLET}")
 message(STATUS "CMAKE_PREFIX_PATH = ${CMAKE_PREFIX_PATH}")
-add_template_library(DBInterface		${CMAKE_CURRENT_SOURCE_DIR}/include)
-add_shared_module(AsyncDBWriter			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DBAdapters/AsyncDBWriter)
+add_template_library(DbInterface		${CMAKE_CURRENT_SOURCE_DIR}/include)
+add_shared_module(AsyncDbWriter			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DBAdapters/AsyncDbWriter)
 add_shared_module(MysqlWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DBAdapters/MysqlWrapper)
 add_shared_module(MariadbWrapper		${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DBAdapters/MariadbWrapper)
 add_shared_module(DuckdbWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DBAdapters/DuckdbWrapper)
@@ -60,13 +60,13 @@ find_package(zstd CONFIG REQUIRED)
 
 
 # 各 wrapper 的后端错误（连接失败/语句失败）经 FailureLogThrottle 走 Spark 日志上报，故统一私有链接 Spark::Core
-target_link_libraries(AsyncDBWriter PRIVATE Spark::Core)
-target_link_libraries(DuckdbWrapper PUBLIC DBInterface PRIVATE Spark::Core duckdb::duckdb)
-target_link_libraries(SqliteWrapper PUBLIC DBInterface PRIVATE Spark::Core unofficial::sqlite3::sqlite3)
-target_link_libraries(MysqlWrapper PUBLIC DBInterface PRIVATE Spark::Core unofficial::mysql-connector-cpp::connector protobuf::libprotobuf LZ4::lz4 zstd::libzstd)
+target_link_libraries(AsyncDbWriter PRIVATE Spark::Core)
+target_link_libraries(DuckdbWrapper PUBLIC DbInterface PRIVATE Spark::Core duckdb::duckdb)
+target_link_libraries(SqliteWrapper PUBLIC DbInterface PRIVATE Spark::Core unofficial::sqlite3::sqlite3)
+target_link_libraries(MysqlWrapper PUBLIC DbInterface PRIVATE Spark::Core unofficial::mysql-connector-cpp::connector protobuf::libprotobuf LZ4::lz4 zstd::libzstd)
 
 
-target_link_libraries(MariadbWrapper PUBLIC DBInterface PRIVATE Spark::Core unofficial::mariadb-connector-cpp::mariadbcpp)
+target_link_libraries(MariadbWrapper PUBLIC DbInterface PRIVATE Spark::Core unofficial::mariadb-connector-cpp::mariadbcpp)
 
 # libmariadb 运行时动态加载认证插件（非 PE 依赖，无法通过 vcpkg applocal 自动部署）
 # 编译时注入插件路径，Connect() 内设环境变量 MARIADB_PLUGIN_DIR 告知 libmariadb
@@ -94,7 +94,7 @@ message("Build timestamp is ${BUILD_TIMESTAMP}")
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(TARGETS
-    AsyncDBWriter DBInterface DuckdbWrapper SqliteWrapper MysqlWrapper MariadbWrapper
+    AsyncDbWriter DbInterface DuckdbWrapper SqliteWrapper MysqlWrapper MariadbWrapper
     EXPORT ${PROJECT_NAME}Targets
     #CONFIGURATIONS Release
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}

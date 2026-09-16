@@ -1,4 +1,4 @@
-#include "DBOperateImpl.h"
+#include "DbOperateImpl.h"
 #include <Spark/TemplateLib/TemplateLib.h>
 #include <cstring>
 
@@ -8,14 +8,14 @@ namespace DbAdapters
 {
 DbOperate* DbOperate::Allocate()
 {
-	return ObjectPool<DBOperateImpl>::GetInstance().Allocate();
+	return ObjectPool<DbOperateImpl>::GetInstance().Allocate();
 }
-void DBOperateImpl::Deallocate()
+void DbOperateImpl::Deallocate()
 {
 	batch_data_.clear();
-	ObjectPool<DBOperateImpl>::GetInstance().Deallocate(this);
+	ObjectPool<DbOperateImpl>::GetInstance().Deallocate(this);
 }
-void DBOperateImpl::DeallocateRecord()
+void DbOperateImpl::DeallocateRecord()
 {
 	if (Operate == DbOperateType::Insert || Operate == DbOperateType::BatchInsert || Operate == DbOperateType::Truncate)
 	{

@@ -1,11 +1,11 @@
 #include "MdbStructs.h"
-#include <DBAdapters/SqliteWrapper/SqliteWrapper.h>
-#include <DBAdapters/DuckdbWrapper/DuckdbWrapper.h>
-#include <DBAdapters/MysqlWrapper/MysqlWrapper.h>
-#include <DBAdapters/MariadbWrapper/MariadbWrapper.h>
-#include <DBAdapters/DBInterface/TypedTable.h>
-#include <DBAdapters/DBInterface/SchemaRegistry.h>
-#include <DBAdapters/AsyncDBWriter/AsyncDBWriter.h>
+#include <DbAdapters/SqliteWrapper/SqliteWrapper.h>
+#include <DbAdapters/DuckdbWrapper/DuckdbWrapper.h>
+#include <DbAdapters/MysqlWrapper/MysqlWrapper.h>
+#include <DbAdapters/MariadbWrapper/MariadbWrapper.h>
+#include <DbAdapters/DbInterface/TypedTable.h>
+#include <DbAdapters/DbInterface/SchemaRegistry.h>
+#include <DbAdapters/AsyncDbWriter/AsyncDbWriter.h>
 #include <Spark/Core/Core.h>
 #include <cstdio>
 #include <cstring>
@@ -18,8 +18,8 @@ using namespace Mdb;
 using namespace Spark::Core;
 using namespace DbAdapters;
 
-const char* sqliteDBName = "./Test.sqlitedb";
-const char* duckdbDBName = "./Test.duckdb";
+const char* sqliteDbName = "./Test.sqlitedb";
+const char* duckdbDbName = "./Test.duckdb";
 const char* mysqlHost = "mysqlx://sams:sams@localhost:33060/mdb";   
 const char* mariadbHost = "tcp://localhost:3306/mdb";
 const char* mariadbUser = "sams";
@@ -115,7 +115,7 @@ static void InitAccount(TypedTable<Account>& table)
 	table.Insert(*account);
 }
 
-static void TestDB(DB* db)
+static void TestDb(Db* db)
 {
 	if (!db->Connect())
 	{
@@ -177,27 +177,27 @@ static void TestDB(DB* db)
 
 static void TestSqlite()
 {
-	SqliteWrapper* sqlitedb = new SqliteWrapper(sqliteDBName);
-	WriteLog(LogLevel::Info, "TestDB with Sqlite");
-	TestDB(sqlitedb);
+	SqliteWrapper* sqlitedb = new SqliteWrapper(sqliteDbName);
+	WriteLog(LogLevel::Info, "TestDb with Sqlite");
+	TestDb(sqlitedb);
 }
 static void TestDuckdb()
 {
-    DuckdbWrapper* duckdb = new DuckdbWrapper(duckdbDBName);
-    WriteLog(LogLevel::Info, "TestDB with Duckdb");
-    TestDB(duckdb);
+    DuckdbWrapper* duckdb = new DuckdbWrapper(duckdbDbName);
+    WriteLog(LogLevel::Info, "TestDb with Duckdb");
+    TestDb(duckdb);
 }
 static void TestMysql()
 {
     MysqlWrapper* mysql = new MysqlWrapper(mysqlHost);
-    WriteLog(LogLevel::Info, "TestDB with Mysql");
-    TestDB(mysql);
+    WriteLog(LogLevel::Info, "TestDb with Mysql");
+    TestDb(mysql);
 }
 static void TestMariadb()
 {
     MariadbWrapper* mariadb = new MariadbWrapper(mariadbHost, mariadbUser, mariadbPassword);
-    WriteLog(LogLevel::Info, "TestDB with Mariadb");
-    TestDB(mariadb);
+    WriteLog(LogLevel::Info, "TestDb with Mariadb");
+    TestDb(mariadb);
 }
 
 // ===================== SelectWithSqlVectorized 测试 =====================
@@ -246,7 +246,7 @@ static void TestDuckdbVectorized()
 {
     using namespace Mdb;
     DuckdbWrapper* duckdb = new DuckdbWrapper(":memory:");
-    WriteLog(LogLevel::Info, "TestDB with DuckdbVectorized");
+    WriteLog(LogLevel::Info, "TestDb with DuckdbVectorized");
 
     duckdb->Exec("CREATE TABLE t_test_tick (TradingDay VARCHAR, InstrumentId VARCHAR, "
                  "LastPrice DECIMAL(24,8), PreClosePrice DOUBLE, Volume BIGINT, "
@@ -370,7 +370,7 @@ static void TestDuckdbVectorizedMultiChunk()
 {
     using namespace Mdb;
     DuckdbWrapper* duckdb = new DuckdbWrapper(":memory:");
-    WriteLog(LogLevel::Info, "TestDB with DuckdbVectorizedMultiChunk");
+    WriteLog(LogLevel::Info, "TestDb with DuckdbVectorizedMultiChunk");
 
     duckdb->Exec("CREATE TABLE t_test_multichunk (TradingDay BIGINT, Volume DOUBLE, LastPrice DECIMAL(24,8));");
     // 6000 行 -> 3 个 chunk（每 chunk 2048 行），跨 chunk 边界验证回退路径的行索引
@@ -647,7 +647,7 @@ static void CheckNarrowNullSentinel(const char* backend, std::vector<Mdb::TestNa
 static void TestSqliteNarrowInteger()
 {
     SqliteWrapper* sqlite = new SqliteWrapper(":memory:");
-    WriteLog(LogLevel::Info, "TestDB with SqliteNarrow");
+    WriteLog(LogLevel::Info, "TestDb with SqliteNarrow");
     InsertNarrowRow(sqlite);
 
     std::vector<Mdb::TestNarrowRow*> records;
@@ -665,7 +665,7 @@ static void TestSqliteNarrowInteger()
 static void TestSqliteNarrowSaturation()
 {
     SqliteWrapper* sqlite = new SqliteWrapper(":memory:");
-    WriteLog(LogLevel::Info, "TestDB with SqliteNarrowSaturation");
+    WriteLog(LogLevel::Info, "TestDb with SqliteNarrowSaturation");
     // 手工建宽列：用 Wrapper 自己的 DDL 会把列建成窄类型，INSERT 阶段就失败，
     // 读侧的收窄分支一行也走不到。期望 6 格饱和 + 一条 narrowed-out-of-range Warning。
     sqlite->Exec("CREATE TABLE t_test_narrow_saturate (HeadGuard INTEGER, MinInt8 INTEGER, "
@@ -715,7 +715,7 @@ static void TestSqliteNarrowSaturation()
 static void TestDuckdbNarrowInteger()
 {
     DuckdbWrapper* duckdb = new DuckdbWrapper(":memory:");
-    WriteLog(LogLevel::Info, "TestDB with DuckdbNarrow");
+    WriteLog(LogLevel::Info, "TestDb with DuckdbNarrow");
     InsertNarrowRow(duckdb);
 
     std::vector<Mdb::TestNarrowRow*> records;
@@ -735,7 +735,7 @@ static void TestDuckdbNarrowInteger()
 static void TestDuckdbNarrowSaturation()
 {
     DuckdbWrapper* duckdb = new DuckdbWrapper(":memory:");
-    WriteLog(LogLevel::Info, "TestDB with DuckdbNarrowSaturation");
+    WriteLog(LogLevel::Info, "TestDb with DuckdbNarrowSaturation");
     duckdb->Exec("CREATE TABLE t_test_narrow_saturate (HeadGuard INTEGER, MinInt8 INTEGER, "
                  "UInt8Value INTEGER, MinInt16 INTEGER, UInt16Value INTEGER, BodyGuard BIGINT, "
                  "UInt32Value BIGINT, UInt64Value BIGINT, TailGuard INTEGER);");
@@ -830,7 +830,7 @@ namespace Mdb
 static void TestDuckdbNarrowColumnTypes()
 {
     DuckdbWrapper* duckdb = new DuckdbWrapper(":memory:");
-    WriteLog(LogLevel::Info, "TestDB with DuckdbNarrowColumnTypes");
+    WriteLog(LogLevel::Info, "TestDb with DuckdbNarrowColumnTypes");
     InsertNarrowRow(duckdb);
 
     RecordFactory factory = {

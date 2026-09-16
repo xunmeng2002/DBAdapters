@@ -598,7 +598,7 @@ namespace DbAdapters
     std::string MakeCreateTableSql(const TableSchema* schema)
     {
         std::ostringstream sql;
-        sql << "CREATE TABLE IF NOT EXISTS " << schema->tableName << "(";
+        sql << "CREATE TABLE IF NOT EXISTS \"" << schema->tableName << "\"(";
         for (int i = 0; i < schema->fieldCount; ++i)
         {
             if (i > 0) sql << ", ";
@@ -636,7 +636,7 @@ namespace DbAdapters
     std::string MakeInsertSql(const TableSchema* schema)
     {
         std::ostringstream sql;
-        sql << "INSERT INTO " << schema->tableName << " (";
+        sql << "INSERT INTO \"" << schema->tableName << "\" (";
         for (int i = 0; i < schema->fieldCount; ++i)
         {
             if (i > 0) sql << ", ";
@@ -655,7 +655,7 @@ namespace DbAdapters
     std::string MakeUpdateSql(const TableSchema* schema)
     {
         std::ostringstream sql;
-        sql << "UPDATE " << schema->tableName << " SET ";
+        sql << "UPDATE \"" << schema->tableName << "\" SET ";
         for (int i = 0; i < schema->fieldCount; ++i)
         {
             if (i > 0) sql << ", ";
@@ -672,11 +672,10 @@ namespace DbAdapters
         return sql.str();
     }
 
-    std::string MakeDeleteSql(const TableSchema* schema,
-                              const int* keyFieldIndices, int keyFieldCount)
+    std::string MakeDeleteSql(const TableSchema* schema, const int* keyFieldIndices, int keyFieldCount)
     {
         std::ostringstream sql;
-        sql << "DELETE FROM " << schema->tableName << " WHERE ";
+        sql << "DELETE FROM \"" << schema->tableName << "\" WHERE ";
         for (int i = 0; i < keyFieldCount; ++i)
         {
             if (i > 0) sql << " AND ";
@@ -756,16 +755,16 @@ void DuckdbWrapper::CreateTable(const TableSchema* schema)
 }
 void DuckdbWrapper::DropTable(const char* tableName)
 {
-    std::string sql = "DROP TABLE IF EXISTS ";
+    std::string sql = "DROP TABLE IF EXISTS \"";
     sql += tableName;
-    sql += ";";
+    sql += "\";";
     Exec(sql.c_str());
 }
 void DuckdbWrapper::TruncateTable(const char* tableName)
 {
-    std::string sql = "DELETE FROM ";
+    std::string sql = "DELETE FROM \"";
     sql += tableName;
-    sql += ";";
+    sql += "\";";
     Exec(sql.c_str());
 }
 
@@ -870,8 +869,7 @@ void DuckdbWrapper::Update(const TableSchema* schema, const void* record)
     }
     duckdb_destroy_result(&result);
 }
-void DuckdbWrapper::Delete(const TableSchema* schema, const void* record,
-                           const int* keyFieldIndices, int keyFieldCount)
+void DuckdbWrapper::Delete(const TableSchema* schema, const void* record, const int* keyFieldIndices, int keyFieldCount)
 {
     std::string sql = MakeDeleteSql(schema, keyFieldIndices, keyFieldCount);
     if (impl_->connection == nullptr)
@@ -898,12 +896,11 @@ void DuckdbWrapper::Delete(const TableSchema* schema, const void* record,
     duckdb_destroy_result(&result);
 }
 
-void DuckdbWrapper::SelectAll(const TableSchema* schema, void* recordsList,
-                              const RecordFactory& factory)
+void DuckdbWrapper::SelectAll(const TableSchema* schema, void* recordsList, const RecordFactory& factory)
 {
-    std::string sql = "SELECT * FROM ";
+    std::string sql = "SELECT * FROM \"";
     sql += schema->tableName;
-    sql += ";";
+    sql += "\";";
 
     if (impl_->connection == nullptr)
     {
@@ -922,8 +919,7 @@ void DuckdbWrapper::SelectAll(const TableSchema* schema, void* recordsList,
     ReadResultRows(result, schema, recordsList, factory);
     duckdb_destroy_result(&result);
 }
-void DuckdbWrapper::SelectWithSql(const char* sql, const TableSchema* schema,
-                                  void* recordsList, const RecordFactory& factory)
+void DuckdbWrapper::SelectWithSql(const char* sql, const TableSchema* schema, void* recordsList, const RecordFactory& factory)
 {
     if (impl_->connection == nullptr)
     {
@@ -943,10 +939,7 @@ void DuckdbWrapper::SelectWithSql(const char* sql, const TableSchema* schema,
     ReadResultRows(result, schema, recordsList, factory);
     duckdb_destroy_result(&result);
 }
-
-std::string DuckdbWrapper::SelectWithSqlVectorized(const char* sql, const TableSchema* schema,
-                                                   void* recordsList,
-                                                   const RecordFactory& factory)
+std::string DuckdbWrapper::SelectWithSqlVectorized(const char* sql, const TableSchema* schema, void* recordsList, const RecordFactory& factory)
 {
     duckdb_result result;
     if (duckdb_query(impl_->connection, sql, &result) != DuckDBSuccess)

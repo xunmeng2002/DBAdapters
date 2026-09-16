@@ -1,12 +1,12 @@
 #pragma once
 #include <DBAdapters/SqliteWrapper/SqliteWrapperExport.h>
-#include <DBAdapters/DBInterface/DB.h>
+#include <DBAdapters/DBInterface/Db.h>
 #include <string>
 
 
 namespace DbAdapters
 {
-class SQLITEWRAPPER_EXPORTS SqliteWrapper : public DB
+class SQLITEWRAPPER_EXPORTS SqliteWrapper : public Db
 {
 public:
 	SqliteWrapper(const std::string& dbName);

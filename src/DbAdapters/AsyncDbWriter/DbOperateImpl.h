@@ -6,7 +6,7 @@
 
 namespace DbAdapters
 {
-class DBOperateImpl : public DbOperate
+class DbOperateImpl : public DbOperate
 {
 public:
     void SetSchemaRegistry(SchemaRegistry* registry) { schema_registry_ = registry; }

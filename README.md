@@ -29,7 +29,7 @@ Created by [Fireseeker](https://fireseeker.cn/)
 | `SchemaRegistry` | 表 ID → `TableSchema` 的注册表，`AsyncDBWriter` 据此反查 schema |
 | `TypedTable<T>` | 类型化表模板：基于 `T::GetSchema()` 提供类型安全的 `Insert / Update / Delete / SelectAll / SelectWithSql / BatchInsert` |
 | `MdbSubscriber` | 内存数据库变更订阅接口（插入 / 批量插入 / 删除 / 按索引删除 / 更新 / 清表） |
-| `DBSubscriber` | 数据库连接状态订阅接口（连接 / 断开） |
+| `DbSubscriber` | 数据库连接状态订阅接口（连接 / 断开） |
 
 ### 2. 数据库适配器（Wrapper）
 
@@ -397,11 +397,11 @@ public:
 };
 
 // 2) 连接状态回调
-class DemoDBSubscriber : public DBSubscriber
+class DemoDBSubscriber : public DbSubscriber
 {
 public:
-    void OnDBConnected() override { WriteLog(LogLevel::Info, "DB connected."); }
-    void OnDBDisConnected() override { WriteLog(LogLevel::Info, "DB disconnected."); }
+    void OnDbConnected() override { WriteLog(LogLevel::Info, "DB connected."); }
+    void OnDbDisConnected() override { WriteLog(LogLevel::Info, "DB disconnected."); }
 };
 
 int main()

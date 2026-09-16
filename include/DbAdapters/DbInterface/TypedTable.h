@@ -1,5 +1,5 @@
 #pragma once
-#include <DBAdapters/DBInterface/DB.h>
+#include <DBAdapters/DBInterface/Db.h>
 #include <vector>
 
 
@@ -9,7 +9,7 @@ template<typename T>
 class TypedTable
 {
 public:
-    explicit TypedTable(DB* db) : db_(db) {}
+    explicit TypedTable(Db* db) : db_(db) {}
 
     void Insert(const T& record)
     {
@@ -59,6 +59,6 @@ private:
         return factory;
     }
 
-    DB* db_;
+    Db* db_;
 };
 }

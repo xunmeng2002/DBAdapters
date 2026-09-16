@@ -1,12 +1,12 @@
 #pragma once
 #include <DBAdapters/MysqlWrapper/MysqlWrapperExport.h>
-#include <DBAdapters/DBInterface/DB.h>
+#include <DBAdapters/DBInterface/Db.h>
 #include <string>
 
 
 namespace DbAdapters
 {
-class MYSQLWRAPPER_EXPORTS MysqlWrapper : public DB
+class MYSQLWRAPPER_EXPORTS MysqlWrapper : public Db
 {
 public:
     MysqlWrapper(const std::string& host);

@@ -29,7 +29,7 @@ It does not depend on any concrete database and only defines the description and
 | `SchemaRegistry` | Registry mapping table ID → `TableSchema`, used by `AsyncDBWriter` to look up schemas |
 | `TypedTable<T>` | Typed table template: type-safe `Insert / Update / Delete / SelectAll / SelectWithSql / BatchInsert` built on `T::GetSchema()` |
 | `MdbSubscriber` | In-memory database change subscription interface (insert / batch insert / erase / erase-by-index / update / truncate) |
-| `DBSubscriber` | Database connection state subscription interface (connect / disconnect) |
+| `DbSubscriber` | Database connection state subscription interface (connect / disconnect) |
 
 ### 2.2 Database Adapters (Wrappers)
 
@@ -397,11 +397,11 @@ public:
 };
 
 // 2) Connection-state callback
-class DemoDBSubscriber : public DBSubscriber
+class DemoDBSubscriber : public DbSubscriber
 {
 public:
-    void OnDBConnected() override { WriteLog(LogLevel::Info, "DB connected."); }
-    void OnDBDisConnected() override { WriteLog(LogLevel::Info, "DB disconnected."); }
+    void OnDbConnected() override { WriteLog(LogLevel::Info, "DB connected."); }
+    void OnDbDisConnected() override { WriteLog(LogLevel::Info, "DB disconnected."); }
 };
 
 int main()

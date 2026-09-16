@@ -6,7 +6,7 @@
 
 namespace DbAdapters
 {
-//FieldType 描述的是"对内存 record 的带类型视图"，不是 DB 列宽：四个 Wrapper 都按
+//FieldType 描述的是"对内存 record 的带类型视图"，不是 Db 列宽：四个 Wrapper 都按
 //(const char*)record + offset 定位，再按此类型定长读写，两个方向都是 sizeof(FieldType 对应类型) 字节。
 //因此新增字段类型时必须保证描述符类型与 MdbStructs.h 里成员的声明类型宽度一致。
 enum class FieldType : unsigned char
@@ -57,7 +57,7 @@ struct TableSchema
     int                     secondaryIndexCount;
 };
 
-//仅供四个 Wrapper 内部使用，不是公共 API：把 DB 侧读到的有符号整数写进 record 成员。
+//仅供四个 Wrapper 内部使用，不是公共 API：把 Db 侧读到的有符号整数写进 record 成员。
 //源值超出目标类型值域时按目标类型饱和写入并返回 false（调用方据此计数并汇总告警），不会越界写。
 //64 位无符号目标请用 TryWriteUInt。
 template <typename TDest>

@@ -128,8 +128,7 @@ namespace DbAdapters
         return sql.str();
     }
 
-    std::string MakeDeleteSql(const TableSchema* schema,
-                               const int* keyFieldIndices, int keyFieldCount)
+    std::string MakeDeleteSql(const TableSchema* schema, const int* keyFieldIndices, int keyFieldCount)
     {
         std::ostringstream sql;
         sql << "DELETE FROM `" << schema->tableName << "` WHERE ";
@@ -142,8 +141,7 @@ namespace DbAdapters
         return sql.str();
     }
 
-    void ReadRow(const mysqlx::Row& row, const TableSchema* schema, void* record,
-                 int& clampedCount)
+    void ReadRow(const mysqlx::Row& row, const TableSchema* schema, void* record, int& clampedCount)
     {
         char* data = static_cast<char*>(record);
         for (int i = 0; i < schema->fieldCount; ++i)
@@ -200,8 +198,7 @@ namespace DbAdapters
     }
 
     // 把结果集里的全部行交给 factory。写入侧不会饱和：窄化交给列类型，越界由服务器报错抛出。
-    void ReadResultRows(mysqlx::RowResult& result, const TableSchema* schema, void* recordsList,
-                        const RecordFactory& factory)
+    void ReadResultRows(mysqlx::RowResult& result, const TableSchema* schema, void* recordsList, const RecordFactory& factory)
     {
         int clampedCount = 0;
         int totalRowCount = 0;
@@ -326,8 +323,7 @@ void MysqlWrapper::Update(const TableSchema* schema, const void* record)
     }
     impl_->session.sql(sql).bind(params).execute();
 }
-void MysqlWrapper::Delete(const TableSchema* schema, const void* record,
-                            const int* keyFieldIndices, int keyFieldCount)
+void MysqlWrapper::Delete(const TableSchema* schema, const void* record, const int* keyFieldIndices, int keyFieldCount)
 {
     std::string sql = MakeDeleteSql(schema, keyFieldIndices, keyFieldCount);
     std::vector<mysqlx::Value> params;
@@ -336,9 +332,7 @@ void MysqlWrapper::Delete(const TableSchema* schema, const void* record,
         params.push_back(FieldToValue(schema->fields[keyFieldIndices[i]], record));
     impl_->session.sql(sql).bind(params).execute();
 }
-
-void MysqlWrapper::SelectAll(const TableSchema* schema, void* recordsList,
-                               const RecordFactory& factory)
+void MysqlWrapper::SelectAll(const TableSchema* schema, void* recordsList, const RecordFactory& factory)
 {
     std::string sql = "SELECT * FROM `";
     sql += schema->tableName;
@@ -347,8 +341,7 @@ void MysqlWrapper::SelectAll(const TableSchema* schema, void* recordsList,
     auto result = impl_->session.sql(sql).execute();
     ReadResultRows(result, schema, recordsList, factory);
 }
-void MysqlWrapper::SelectWithSql(const char* sql, const TableSchema* schema,
-                                   void* recordsList, const RecordFactory& factory)
+void MysqlWrapper::SelectWithSql(const char* sql, const TableSchema* schema, void* recordsList, const RecordFactory& factory)
 {
     auto result = impl_->session.sql(sql).execute();
     ReadResultRows(result, schema, recordsList, factory);
