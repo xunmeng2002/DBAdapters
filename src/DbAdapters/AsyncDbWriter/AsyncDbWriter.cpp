@@ -10,15 +10,15 @@ using namespace Spark::Core;
 namespace DbAdapters
 {
 AsyncDbWriter::AsyncDbWriter(Db* db, SchemaRegistry* schemaRegistry)
-	:ThreadBase("AsyncDbWriter"), m_Db(db), schemaRegistry_(schemaRegistry), dbSubscriber_(nullptr)
+	:ThreadBase("AsyncDbWriter"), db_(db), schemaRegistry_(schemaRegistry), dbSubscriber_(nullptr)
 {
 }
 AsyncDbWriter::~AsyncDbWriter()
 {
-	if (m_Db != nullptr)
+	if (db_ != nullptr)
 	{
-		delete m_Db;
-		m_Db = nullptr;
+		delete db_;
+		db_ = nullptr;
 	}
 }
 void AsyncDbWriter::Subscribe(DbSubscriber* dbSubscriber)
@@ -27,13 +27,13 @@ void AsyncDbWriter::Subscribe(DbSubscriber* dbSubscriber)
 }
 Db* AsyncDbWriter::GetDb()
 {
-	return m_Db;
+	return db_;
 }
 bool AsyncDbWriter::Connect()
 {
 	try
 	{
-		if (m_Db->Connect())
+		if (db_->Connect())
 		{
 			connected_ = true;
 			WriteLog(LogLevel::Info, "AsyncDbWriter: Db connected.");
@@ -59,7 +59,7 @@ void AsyncDbWriter::DisConnect()
 	{
 		dbSubscriber_->OnDbDisConnected();
 	}
-	m_Db->DisConnect();
+	db_->DisConnect();
 	lock_guard<mutex> guard(mutex_);
 	const size_t pendingCount = dbOperates_.size();
 	for (auto item : dbOperates_)
@@ -269,22 +269,22 @@ DbOperate* AsyncDbWriter::AllocateDbOperate()
 
 void AsyncDbWriter::CreateTables(DbOperate* dbOperate)
 {
-	m_Db->CreateTables(schemaRegistry_->GetAllSchemas(), schemaRegistry_->GetTableCount());
+	db_->CreateTables(schemaRegistry_->GetAllSchemas(), schemaRegistry_->GetTableCount());
 }
 void AsyncDbWriter::DropTables(DbOperate* dbOperate)
 {
-	m_Db->DropTables(schemaRegistry_->GetAllSchemas(), schemaRegistry_->GetTableCount());
+	db_->DropTables(schemaRegistry_->GetAllSchemas(), schemaRegistry_->GetTableCount());
 }
 void AsyncDbWriter::TruncateTables(DbOperate* dbOperate)
 {
-	m_Db->TruncateTables(schemaRegistry_->GetAllSchemas(), schemaRegistry_->GetTableCount());
+	db_->TruncateTables(schemaRegistry_->GetAllSchemas(), schemaRegistry_->GetTableCount());
 }
 void AsyncDbWriter::InsertRecord(DbOperate* dbOperate)
 {
 	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableId);
 	if (schema)
 	{
-		m_Db->Insert(schema, dbOperate->Record);
+		db_->Insert(schema, dbOperate->Record);
 	}
 }
 void AsyncDbWriter::BatchInsertRecords(DbOperate* dbOperate)
@@ -295,7 +295,7 @@ void AsyncDbWriter::BatchInsertRecords(DbOperate* dbOperate)
 	auto& batch = static_cast<DbOperateImpl*>(dbOperate)->GetBatchData();
 	if (!batch.empty())
 	{
-		m_Db->BatchInsert(schema, batch.data(), static_cast<int>(batch.size()));
+		db_->BatchInsert(schema, batch.data(), static_cast<int>(batch.size()));
 	}
 }
 void AsyncDbWriter::DeleteRecord(DbOperate* dbOperate)
@@ -303,7 +303,7 @@ void AsyncDbWriter::DeleteRecord(DbOperate* dbOperate)
 	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableId);
 	if (schema)
 	{
-		m_Db->Delete(schema, dbOperate->Record, schema->primaryKeyIndices, schema->primaryKeyCount);
+		db_->Delete(schema, dbOperate->Record, schema->primaryKeyIndices, schema->primaryKeyCount);
 		schema->DeallocateRecord(dbOperate->Record);
 	}
 }
@@ -317,7 +317,7 @@ void AsyncDbWriter::DeleteRecordByIndex(DbOperate* dbOperate)
 	{
 		if (schema->secondaryIndices[i].indexId == dbOperate->IndexId)
 		{
-			m_Db->Delete(schema, dbOperate->Record,
+			db_->Delete(schema, dbOperate->Record,
 			             schema->secondaryIndices[i].fieldIndices,
 			             schema->secondaryIndices[i].fieldCount);
 			schema->DeallocateRecord(dbOperate->Record);
@@ -332,7 +332,7 @@ void AsyncDbWriter::UpdateRecord(DbOperate* dbOperate)
 	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableId);
 	if (schema)
 	{
-		m_Db->Update(schema, dbOperate->Record);
+		db_->Update(schema, dbOperate->Record);
 		schema->DeallocateRecord(dbOperate->Record);
 	}
 }
@@ -341,7 +341,7 @@ void AsyncDbWriter::TruncateTable(DbOperate* dbOperate)
 	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableId);
 	if (schema)
 	{
-		m_Db->TruncateTable(schema->tableName);
+		db_->TruncateTable(schema->tableName);
 	}
 }
 }

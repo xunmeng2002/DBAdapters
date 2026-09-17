@@ -9,10 +9,10 @@ namespace DbAdapters
     class FailureLogThrottle
     {
     public:
-        static constexpr int kDefaultReportInterval = 1000;
+        static constexpr int DefaultReportInterval = 1000;
 
-        explicit FailureLogThrottle(int reportInterval = kDefaultReportInterval)
-            : reportInterval_(reportInterval > 0 ? reportInterval : kDefaultReportInterval)
+        explicit FailureLogThrottle(int reportInterval = DefaultReportInterval)
+            : reportInterval_(reportInterval > 0 ? reportInterval : DefaultReportInterval)
         {
         }
         FailureLogThrottle(const FailureLogThrottle&) = delete;

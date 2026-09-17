@@ -15,29 +15,22 @@ public:
     {
         db_->Insert(&T::GetSchema(), &record);
     }
-
     void Update(const T& record)
     {
         db_->Update(&T::GetSchema(), &record);
     }
-
-    void Delete(const T& record,
-                const int* keyIndices = T::GetSchema().primaryKeyIndices,
-                int keyCount = T::GetSchema().primaryKeyCount)
+    void Delete(const T& record, const int* keyIndices = T::GetSchema().primaryKeyIndices, int keyCount = T::GetSchema().primaryKeyCount)
     {
         db_->Delete(&T::GetSchema(), &record, keyIndices, keyCount);
     }
-
     void SelectAll(std::vector<T*>& out)
     {
         db_->SelectAll(&T::GetSchema(), &out, GetFactory());
     }
-
     void SelectWithSql(const char* sql, std::vector<T*>& out)
     {
         db_->SelectWithSql(sql, &T::GetSchema(), &out, GetFactory());
     }
-
     void BatchInsert(const std::vector<const T*>& records)
     {
         std::vector<const void*> rawPtrs(records.size());

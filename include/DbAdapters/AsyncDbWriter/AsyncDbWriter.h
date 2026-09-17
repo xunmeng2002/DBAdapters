@@ -56,11 +56,9 @@ private:
 	void BatchInsertRecords(DbOperate* dbOperate);
 	void TruncateTable(DbOperate* dbOperate);
 
-private:
 	// 连接失败按固定重试次数节流上报：每轮 Run 都会重试一次连接，不节流会按 timeOut_ 频率刷屏
 	static constexpr int connectFailureReportInterval_ = 100;
-
-	Db* m_Db;
+	Db* db_;
 	SchemaRegistry* schemaRegistry_;
 	DbSubscriber* dbSubscriber_;
 	std::list<DbOperate*> dbOperates_;
