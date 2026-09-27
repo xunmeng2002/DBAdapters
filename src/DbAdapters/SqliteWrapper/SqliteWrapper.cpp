@@ -1,6 +1,6 @@
-#include <DBAdapters/SqliteWrapper/SqliteWrapper.h>
+#include <DbAdapters/SqliteWrapper/SqliteWrapper.h>
 
-#include <DBAdapters/DBInterface/FailureLogThrottle.h>
+#include <DbAdapters/DbInterface/FailureLogThrottle.h>
 
 #include <Spark/Core/Logger/Logger.h>
 

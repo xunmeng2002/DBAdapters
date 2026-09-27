@@ -1,6 +1,6 @@
 #pragma once
-#include <DBAdapters/SqliteWrapper/SqliteWrapperExport.h>
-#include <DBAdapters/DBInterface/Db.h>
+#include <DbAdapters/SqliteWrapper/SqliteWrapperExport.h>
+#include <DbAdapters/DbInterface/Db.h>
 #include <string>
 
 

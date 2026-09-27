@@ -1,5 +1,5 @@
 #pragma once
-#include <DBAdapters/DBInterface/Schema.h>
+#include <DbAdapters/DbInterface/Schema.h>
 #include <Spark/Types.h>
 
 using DbAdapters::TableSchema;

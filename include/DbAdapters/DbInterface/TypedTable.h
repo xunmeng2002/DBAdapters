@@ -1,5 +1,5 @@
 #pragma once
-#include <DBAdapters/DBInterface/Db.h>
+#include <DbAdapters/DbInterface/Db.h>
 #include <vector>
 
 

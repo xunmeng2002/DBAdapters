@@ -3,7 +3,7 @@
 [![Language](https://img.shields.io/badge/Language-C++20+-orange.svg)]()
 [![Build](https://img.shields.io/badge/Build-CMake3.20+-green.svg)]()
 
-**DBAdapters** is a unified **database access layer** built on top of the **Spark** foundational library. Designed for financial trading and risk-management systems, it provides consistent read/write encapsulation for four databases: **SQLite, DuckDB, MySQL, and MariaDB**. Through a three-layer abstraction — **table schema description (`TableSchema`) → typed table (`TypedTable`) → async writer (`AsyncDBWriter`)** — business code can create tables, perform CRUD, and persist asynchronously without writing SQL by hand, fitting naturally into the classic low-latency "in-memory database + persistent database" architecture.
+**DBAdapters** is a unified **database access layer** built on top of the **Spark** foundational library. Designed for financial trading and risk-management systems, it provides consistent read/write encapsulation for four databases: **SQLite, DuckDB, MySQL, and MariaDB**. Through a three-layer abstraction — **table schema description (`TableSchema`) → typed table (`TypedTable`) → async writer (`AsyncDbWriter`)** — business code can create tables, perform CRUD, and persist asynchronously without writing SQL by hand, fitting naturally into the classic low-latency "in-memory database + persistent database" architecture.
 
 Created by [Fireseeker](https://fireseeker.cn/)
 
@@ -13,9 +13,9 @@ This is a personal open-source component library focused on the goal of "**descr
 
 ## 2. Core Features
 
-The library is organized into three parts: the **unified interface layer (DBInterface)**, the **four database adapters (Wrappers)**, and the **async writer (AsyncDBWriter)**.
+The library is organized into three parts: the **unified interface layer (DbInterface)**, the **four database adapters (Wrappers)**, and the **async writer (AsyncDbWriter)**.
 
-### 2.1 DBInterface — Unified Interface Layer (header-only template library)
+### 2.1 DbInterface — Unified Interface Layer (header-only template library)
 
 It does not depend on any concrete database and only defines the description and access protocols:
 
@@ -26,7 +26,7 @@ It does not depend on any concrete database and only defines the description and
 | `FieldDescriptor` | Field description: name, type (Int / Int64 / Double / Char / Bool), offset within the record struct, and array size |
 | `RecordFactory` | Record allocation and collection callbacks for query results (`Allocate` / `PushBack`) |
 | `IndexDefinition` | Secondary index definition (index ID + field set), used for delete-by-index |
-| `SchemaRegistry` | Registry mapping table ID → `TableSchema`, used by `AsyncDBWriter` to look up schemas |
+| `SchemaRegistry` | Registry mapping table ID → `TableSchema`, used by `AsyncDbWriter` to look up schemas |
 | `TypedTable<T>` | Typed table template: type-safe `Insert / Update / Delete / SelectAll / SelectWithSql / BatchInsert` built on `T::GetSchema()` |
 | `MdbSubscriber` | In-memory database change subscription interface (insert / batch insert / erase / erase-by-index / update / truncate) |
 | `DbSubscriber` | Database connection state subscription interface (connect / disconnect) |
@@ -44,7 +44,7 @@ All four adapters inherit the unified `DB` interface — switching databases onl
 
 > The MySQL adapter uses the **X DevAPI** (`mysqlx://` protocol; the server must enable the X Plugin, default port 33060). The MariaDB adapter uses the classic `tcp://` protocol (default port 3306).
 
-### 2.3 AsyncDBWriter — Async Persistence
+### 2.3 AsyncDbWriter — Async Persistence
 
 The key component that flushes "in-memory database changes" to disk asynchronously:
 
@@ -57,24 +57,24 @@ The key component that flushes "in-memory database changes" to disk asynchronous
 ### 2.4 Typical Scenario
 
 ```
-In-memory trading database (low-latency) ── subscribes to changes ──► AsyncDBWriter ──► Persistent database (SQLite / DuckDB / MySQL / MariaDB)
+In-memory trading database (low-latency) ── subscribes to changes ──► AsyncDbWriter ──► Persistent database (SQLite / DuckDB / MySQL / MariaDB)
 ```
 
-The in-memory database broadcasts every change through `MdbSubscriber`; `AsyncDBWriter` asynchronously writes these events to the persistent database for post-close reconciliation, offline analysis, web queries, etc. Write latency never blocks the trading hot path.
+The in-memory database broadcasts every change through `MdbSubscriber`; `AsyncDbWriter` asynchronously writes these events to the persistent database for post-close reconciliation, offline analysis, web queries, etc. Write latency never blocks the trading hot path.
 
 ## 3. Project Directory Structure
 
 ```
 DBAdapters/
-├── include/DBAdapters/           # Public headers
-│   ├── DBInterface/              # Unified interface layer (DB, Schema, TypedTable, SchemaRegistry, etc.)
-│   ├── AsyncDBWriter/            # Async writer component
+├── include/DbAdapters/           # Public headers
+│   ├── DbInterface/              # Unified interface layer (DB, Schema, TypedTable, SchemaRegistry, etc.)
+│   ├── AsyncDbWriter/            # Async writer component
 │   ├── SqliteWrapper/            # SQLite adapter
 │   ├── DuckdbWrapper/            # DuckDB adapter
 │   ├── MysqlWrapper/             # MySQL adapter
 │   └── MariadbWrapper/           # MariaDB adapter
-├── src/DBAdapters/               # Source code
-│   ├── AsyncDBWriter/            # Async writer implementation
+├── src/DbAdapters/               # Source code
+│   ├── AsyncDbWriter/            # Async writer implementation
 │   ├── SqliteWrapper/            # SQLite adapter implementation
 │   ├── DuckdbWrapper/            # DuckDB adapter implementation (incl. vectorized reads)
 │   ├── MysqlWrapper/             # MySQL adapter implementation
@@ -197,8 +197,8 @@ sh Install.sh
 ### Example 1: Schema-Driven CRUD (TypedTable + SQLite)
 
 ```cpp
-#include <DBAdapters/SqliteWrapper/SqliteWrapper.h>
-#include <DBAdapters/DBInterface/TypedTable.h>
+#include <DbAdapters/SqliteWrapper/SqliteWrapper.h>
+#include <DbAdapters/DbInterface/TypedTable.h>
 #include <Spark/Core/Core.h>
 #include <cstring>
 #include <vector>
@@ -277,7 +277,7 @@ int main(int argc, const char* argv[])
 ### Example 2: DuckDB Vectorized Bulk Read (SelectWithSqlVectorized)
 
 ```cpp
-#include <DBAdapters/DuckdbWrapper/DuckdbWrapper.h>
+#include <DbAdapters/DuckdbWrapper/DuckdbWrapper.h>
 #include <Spark/Core/Core.h>
 #include <cstring>
 #include <vector>
@@ -369,12 +369,12 @@ int main()
 
 > **Vectorized-read notes**: the SQL column order must match the schema field order one-to-one; NULL cells are written as type sentinels — `Double → +inf`, `Int / Int64 → 0`, `Char → empty string`, `Bool → false`. An empty return string means success; otherwise it holds the DuckDB error message.
 
-### Example 3: Async Persistence with AsyncDBWriter
+### Example 3: Async Persistence with AsyncDbWriter
 
 ```cpp
-#include <DBAdapters/AsyncDBWriter/AsyncDBWriter.h>
-#include <DBAdapters/SqliteWrapper/SqliteWrapper.h>
-#include <DBAdapters/DBInterface/SchemaRegistry.h>
+#include <DbAdapters/AsyncDbWriter/AsyncDbWriter.h>
+#include <DbAdapters/SqliteWrapper/SqliteWrapper.h>
+#include <DbAdapters/DbInterface/SchemaRegistry.h>
 #include <Spark/Core/Core.h>
 
 using namespace DbAdapters;
@@ -409,13 +409,13 @@ int main()
     DemoSchemaRegistry registry;
     DemoDBSubscriber subscriber;
 
-    // AsyncDBWriter takes ownership of db and releases it in its destructor
-    AsyncDBWriter writer(new SqliteWrapper("./async.sqlitedb"), &registry);
+    // AsyncDbWriter takes ownership of db and releases it in its destructor
+    AsyncDbWriter writer(new SqliteWrapper("./async.sqlitedb"), &registry);
     writer.Subscribe(&subscriber);
 
     if (!writer.Connect())
     {
-        WriteLog(LogLevel::Error, "AsyncDBWriter connect failed.");
+        WriteLog(LogLevel::Error, "AsyncDbWriter connect failed.");
         return -1;
     }
     writer.Start();                               // Start the background persistence thread
@@ -432,7 +432,7 @@ int main()
 }
 ```
 
-> **Record-ownership contract**: for `Insert / BatchInsert`, the record is owned by the caller (the in-memory database) and must stay valid until the operation is consumed; for `Delete / DeleteByIndex / Update`, the record is released by `AsyncDBWriter` via the schema's `DeallocateRecord`, so those records should be dynamically allocated.
+> **Record-ownership contract**: for `Insert / BatchInsert`, the record is owned by the caller (the in-memory database) and must stay valid until the operation is consumed; for `Delete / DeleteByIndex / Update`, the record is released by `AsyncDbWriter` via the schema's `DeallocateRecord`, so those records should be dynamically allocated.
 
 ## 7. Integration Tests
 
@@ -465,7 +465,7 @@ The project ships the **test/TestDB** integration test program covering all four
 
 ## 9. Additional Notes
 
-- **Include style**: headers use the `#include <DBAdapters/Module/HeaderName.h>` convention
+- **Include style**: headers use the `#include <DbAdapters/Module/HeaderName.h>` convention
 - **Namespace**: all interfaces live in the `DbAdapters` namespace
 - **Spark dependency**: threading, logging, object pooling, and type definitions such as `DbOperateType` come from the [Spark](https://gitee.com/xunmeng2002/Spark.git) foundational library
 - **Cross-database differences**: MySQL uses the MyISAM engine with the `utf8mb4_bin` collation; DuckDB's `TruncateTable` actually executes `DELETE FROM`; SQLite / DuckDB file-based and in-memory (`:memory:`) databases can both be used directly

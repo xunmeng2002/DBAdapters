@@ -1,6 +1,6 @@
 #pragma once
-#include <DBAdapters/MysqlWrapper/MysqlWrapperExport.h>
-#include <DBAdapters/DBInterface/Db.h>
+#include <DbAdapters/MysqlWrapper/MysqlWrapperExport.h>
+#include <DbAdapters/DbInterface/Db.h>
 #include <string>
 
 

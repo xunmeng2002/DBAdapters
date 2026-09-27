@@ -1,4 +1,4 @@
-#include <DBAdapters/MysqlWrapper/MysqlWrapper.h>
+#include <DbAdapters/MysqlWrapper/MysqlWrapper.h>
 
 #include <Spark/Core/Logger/Logger.h>
 

@@ -1,6 +1,6 @@
 #pragma once
-#include <DBAdapters/MariadbWrapper/MariadbWrapperExport.h>
-#include <DBAdapters/DBInterface/Db.h>
+#include <DbAdapters/MariadbWrapper/MariadbWrapperExport.h>
+#include <DbAdapters/DbInterface/Db.h>
 #include <string>
 #include <memory>
 

@@ -1,6 +1,6 @@
 #pragma once
-#include <DBAdapters/DuckdbWrapper/DuckdbWrapperExport.h>
-#include <DBAdapters/DBInterface/Db.h>
+#include <DbAdapters/DuckdbWrapper/DuckdbWrapperExport.h>
+#include <DbAdapters/DbInterface/Db.h>
 #include <string>
 
 

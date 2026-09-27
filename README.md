@@ -3,7 +3,7 @@
 [![Language](https://img.shields.io/badge/Language-C++20+-orange.svg)]()
 [![Build](https://img.shields.io/badge/Build-CMake3.20+-green.svg)]()
 
-**DBAdapters** 是一套基于 **Spark** 基础库的统一**数据库访问层**，面向金融交易 / 风控系统，提供 **SQLite、DuckDB、MySQL、MariaDB** 四种数据库的一致性读写封装。通过"**表结构描述（TableSchema）→ 类型化表（TypedTable）→ 异步写库（AsyncDBWriter）**"三层抽象，业务代码无需手写 SQL 即可完成建表、增删改查与异步落盘，天然适配"内存数据库 + 持久化数据库"的经典低时延架构。
+**DBAdapters** 是一套基于 **Spark** 基础库的统一**数据库访问层**，面向金融交易 / 风控系统，提供 **SQLite、DuckDB、MySQL、MariaDB** 四种数据库的一致性读写封装。通过"**表结构描述（TableSchema）→ 类型化表（TypedTable）→ 异步写库（AsyncDbWriter）**"三层抽象，业务代码无需手写 SQL 即可完成建表、增删改查与异步落盘，天然适配"内存数据库 + 持久化数据库"的经典低时延架构。
 
 Created by [Fireseeker](https://fireseeker.cn/)
 
@@ -13,9 +13,9 @@ Created by [Fireseeker](https://fireseeker.cn/)
 
 ## 二、核心功能模块
 
-整体分为三大部分：**统一接口层（DBInterface）**、**四种数据库适配器（Wrapper）**、**异步写库（AsyncDBWriter）**。
+整体分为三大部分：**统一接口层（DbInterface）**、**四种数据库适配器（Wrapper）**、**异步写库（AsyncDbWriter）**。
 
-### 1. DBInterface —— 统一接口层（header-only 模板库）
+### 1. DbInterface —— 统一接口层（header-only 模板库）
 
 不依赖任何具体数据库，仅提供描述与访问协议：
 
@@ -26,7 +26,7 @@ Created by [Fireseeker](https://fireseeker.cn/)
 | `FieldDescriptor` | 字段描述：名称、类型（Int / Int64 / Double / Char / Bool）、在记录结构体中的偏移与数组长度 |
 | `RecordFactory` | 查询结果的记录分配与收集回调（`Allocate` / `PushBack`） |
 | `IndexDefinition` | 二级索引定义（索引 ID + 字段集合），供按索引删除使用 |
-| `SchemaRegistry` | 表 ID → `TableSchema` 的注册表，`AsyncDBWriter` 据此反查 schema |
+| `SchemaRegistry` | 表 ID → `TableSchema` 的注册表，`AsyncDbWriter` 据此反查 schema |
 | `TypedTable<T>` | 类型化表模板：基于 `T::GetSchema()` 提供类型安全的 `Insert / Update / Delete / SelectAll / SelectWithSql / BatchInsert` |
 | `MdbSubscriber` | 内存数据库变更订阅接口（插入 / 批量插入 / 删除 / 按索引删除 / 更新 / 清表） |
 | `DbSubscriber` | 数据库连接状态订阅接口（连接 / 断开） |
@@ -44,7 +44,7 @@ Created by [Fireseeker](https://fireseeker.cn/)
 
 > MySQL 适配器使用 **X DevAPI**（`mysqlx://` 协议，需服务端开启 X Plugin，默认端口 33060）；MariaDB 适配器使用经典 `tcp://` 协议（默认端口 3306）。
 
-### 3. AsyncDBWriter —— 异步写库
+### 3. AsyncDbWriter —— 异步写库
 
 把"内存库变更"异步落盘的关键组件：
 
@@ -57,24 +57,24 @@ Created by [Fireseeker](https://fireseeker.cn/)
 ### 4. 典型场景
 
 ```
-内存交易数据库（低时延读写）── 订阅变更 ──► AsyncDBWriter ──► 持久化数据库（SQLite / DuckDB / MySQL / MariaDB）
+内存交易数据库（低时延读写）── 订阅变更 ──► AsyncDbWriter ──► 持久化数据库（SQLite / DuckDB / MySQL / MariaDB）
 ```
 
-内存库以 `MdbSubscriber` 广播每次数据变化，`AsyncDBWriter` 将这些事件异步写入持久化库，供盘后对账、离线分析、Web 查询等场景使用，写库延迟不影响交易主链路。
+内存库以 `MdbSubscriber` 广播每次数据变化，`AsyncDbWriter` 将这些事件异步写入持久化库，供盘后对账、离线分析、Web 查询等场景使用，写库延迟不影响交易主链路。
 
 ## 三、项目目录结构
 
 ```
 DBAdapters/
-├── include/DBAdapters/           # 对外暴露头文件
-│   ├── DBInterface/              # 统一接口层（DB、Schema、TypedTable、SchemaRegistry 等）
-│   ├── AsyncDBWriter/            # 异步写库组件
+├── include/DbAdapters/           # 对外暴露头文件
+│   ├── DbInterface/              # 统一接口层（DB、Schema、TypedTable、SchemaRegistry 等）
+│   ├── AsyncDbWriter/            # 异步写库组件
 │   ├── SqliteWrapper/            # SQLite 适配器
 │   ├── DuckdbWrapper/            # DuckDB 适配器
 │   ├── MysqlWrapper/             # MySQL 适配器
 │   └── MariadbWrapper/           # MariaDB 适配器
-├── src/DBAdapters/               # 源码实现
-│   ├── AsyncDBWriter/            # 异步写库实现
+├── src/DbAdapters/               # 源码实现
+│   ├── AsyncDbWriter/            # 异步写库实现
 │   ├── SqliteWrapper/            # SQLite 适配器实现
 │   ├── DuckdbWrapper/            # DuckDB 适配器实现（含向量化读取）
 │   ├── MysqlWrapper/             # MySQL 适配器实现
@@ -197,8 +197,8 @@ sh Install.sh
 ### 示例 1：Schema 驱动的增删改查（TypedTable + SQLite）
 
 ```cpp
-#include <DBAdapters/SqliteWrapper/SqliteWrapper.h>
-#include <DBAdapters/DBInterface/TypedTable.h>
+#include <DbAdapters/SqliteWrapper/SqliteWrapper.h>
+#include <DbAdapters/DbInterface/TypedTable.h>
 #include <Spark/Core/Core.h>
 #include <cstring>
 #include <vector>
@@ -277,7 +277,7 @@ int main(int argc, const char* argv[])
 ### 示例 2：DuckDB 向量化批量读取（SelectWithSqlVectorized）
 
 ```cpp
-#include <DBAdapters/DuckdbWrapper/DuckdbWrapper.h>
+#include <DbAdapters/DuckdbWrapper/DuckdbWrapper.h>
 #include <Spark/Core/Core.h>
 #include <cstring>
 #include <vector>
@@ -369,12 +369,12 @@ int main()
 
 > **向量化读取说明**：SQL 列序必须与 schema 字段序一一对应；NULL 写入类型哨兵——`Double → +inf`、`Int / Int64 → 0`、`Char → 空串`、`Bool → false`；返回值为空串表示成功，否则为 DuckDB 错误信息。
 
-### 示例 3：AsyncDBWriter 异步写库
+### 示例 3：AsyncDbWriter 异步写库
 
 ```cpp
-#include <DBAdapters/AsyncDBWriter/AsyncDBWriter.h>
-#include <DBAdapters/SqliteWrapper/SqliteWrapper.h>
-#include <DBAdapters/DBInterface/SchemaRegistry.h>
+#include <DbAdapters/AsyncDbWriter/AsyncDbWriter.h>
+#include <DbAdapters/SqliteWrapper/SqliteWrapper.h>
+#include <DbAdapters/DbInterface/SchemaRegistry.h>
 #include <Spark/Core/Core.h>
 
 using namespace DbAdapters;
@@ -409,13 +409,13 @@ int main()
     DemoSchemaRegistry registry;
     DemoDBSubscriber subscriber;
 
-    // AsyncDBWriter 接管 db 的所有权，析构时释放
-    AsyncDBWriter writer(new SqliteWrapper("./async.sqlitedb"), &registry);
+    // AsyncDbWriter 接管 db 的所有权，析构时释放
+    AsyncDbWriter writer(new SqliteWrapper("./async.sqlitedb"), &registry);
     writer.Subscribe(&subscriber);
 
     if (!writer.Connect())
     {
-        WriteLog(LogLevel::Error, "AsyncDBWriter connect failed.");
+        WriteLog(LogLevel::Error, "AsyncDbWriter connect failed.");
         return -1;
     }
     writer.Start();                               // 启动后台落库线程
@@ -432,7 +432,7 @@ int main()
 }
 ```
 
-> **记录所有权约定**：`Insert / BatchInsert` 的记录由调用方（内存库）管理生命周期，且在操作被消费前需保持有效；`Delete / DeleteByIndex / Update` 的记录由 `AsyncDBWriter` 通过 schema 的 `DeallocateRecord` 释放，因此删除 / 更新用的记录应动态分配。
+> **记录所有权约定**：`Insert / BatchInsert` 的记录由调用方（内存库）管理生命周期，且在操作被消费前需保持有效；`Delete / DeleteByIndex / Update` 的记录由 `AsyncDbWriter` 通过 schema 的 `DeallocateRecord` 释放，因此删除 / 更新用的记录应动态分配。
 
 ## 七、集成测试
 
@@ -465,7 +465,7 @@ int main()
 
 ## 九、补充说明
 
-- **包含路径**：头文件统一使用 `#include <DBAdapters/Module/HeaderName.h>` 风格
+- **包含路径**：头文件统一使用 `#include <DbAdapters/Module/HeaderName.h>` 风格
 - **命名空间**：全部接口位于 `DbAdapters` 命名空间
 - **依赖 Spark**：线程、日志、对象池、`DbOperateType` 等类型定义来自 [Spark](https://gitee.com/xunmeng2002/Spark.git) 基础库
 - **跨库差异**：MySQL 使用 MyISAM 引擎与 `utf8mb4_bin` 排序规则；DuckDB 的 `TruncateTable` 实际执行 `DELETE FROM`；SQLite / DuckDB 单文件库与内存库（`:memory:`）均可直接使用

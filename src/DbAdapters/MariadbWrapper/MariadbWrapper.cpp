@@ -1,4 +1,4 @@
-#include <DBAdapters/MariadbWrapper/MariadbWrapper.h>
+#include <DbAdapters/MariadbWrapper/MariadbWrapper.h>
 
 #include <Spark/Core/Logger/Logger.h>
 
@@ -290,7 +290,7 @@ bool MariadbWrapper::Connect()
 #ifdef _WIN32
     _putenv_s("MARIADB_PLUGIN_DIR", MARIADB_PLUGIN_DIR);
 #endif
-    // connect 失败抛异常而非返回空；若放任其穿出 AsyncDBWriter::Run()，会穿过 ThreadBase::ThreadFunc（无 catch）
+    // connect 失败抛异常而非返回空；若放任其穿出 AsyncDbWriter::Run()，会穿过 ThreadBase::ThreadFunc（无 catch）
     // 直达 std::terminate，故在此转为返回 false，交由写库线程按连接失败重试并上报
     try
     {

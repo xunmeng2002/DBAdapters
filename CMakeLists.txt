@@ -38,11 +38,11 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/lib/$<CONFIG>)
 message(STATUS "VCPKG_TARGET_TRIPLET = ${VCPKG_TARGET_TRIPLET}")
 message(STATUS "CMAKE_PREFIX_PATH = ${CMAKE_PREFIX_PATH}")
 add_template_library(DbInterface		${CMAKE_CURRENT_SOURCE_DIR}/include)
-add_shared_module(AsyncDbWriter			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DBAdapters/AsyncDbWriter)
-add_shared_module(MysqlWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DBAdapters/MysqlWrapper)
-add_shared_module(MariadbWrapper		${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DBAdapters/MariadbWrapper)
-add_shared_module(DuckdbWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DBAdapters/DuckdbWrapper)
-add_shared_module(SqliteWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DBAdapters/SqliteWrapper)
+add_shared_module(AsyncDbWriter			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/AsyncDbWriter)
+add_shared_module(MysqlWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/MysqlWrapper)
+add_shared_module(MariadbWrapper		${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/MariadbWrapper)
+add_shared_module(DuckdbWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/DuckdbWrapper)
+add_shared_module(SqliteWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/SqliteWrapper)
 
 if(WIN32)
     find_package(Spark REQUIRED PATHS "../Libs/Spark/x64-windows")
@@ -115,7 +115,7 @@ write_basic_package_version_file(
     COMPATIBILITY SameMajorVersion
 )
 
-# 生成 DBAdaptersConfig.cmake
+# 生成 DbAdaptersConfig.cmake
 # find_dependency 使 vcpkg 注册这些包，applocal 才能自动拷贝 DLL
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
     "include(CMakeFindDependencyMacro)\n"
