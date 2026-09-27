@@ -151,10 +151,14 @@ Debug 与 Release 取到同一个值。
 
 | `DbType` | 后端种类 | 取法 |
 | ---- | ---- | ---- |
-| `0` DuckDB | `DbTypeType::DuckDb` | 直接 `new DuckdbWrapper(dbHost)`，**不装载** |
-| `1` SQLite（缺省） | `DbTypeType::SqliteDb` | 直接 `new SqliteWrapper(dbHost)`，**不装载** |
+| `0` DuckDB | `DbTypeType::DuckDb` | `LoadDatabaseBackend(DbTypeType::DuckDb, …)` |
+| `1` SQLite（缺省） | `DbTypeType::SqliteDb` | `LoadDatabaseBackend(DbTypeType::SqliteDb, …)` |
 | `2` MySQL | `DbTypeType::MysqlDb` | `LoadDatabaseBackend(DbTypeType::MysqlDb, …)` |
 | `3` MariaDB | `DbTypeType::MariaDb` | `LoadDatabaseBackend(DbTypeType::MariaDb, …)` |
+
+**四个后端走同一条路**，消费方不写「哪个后端怎么建」：模块名、平台前后缀、Debug 后缀全在本库内
+（§四）。某个仓与某个适配器有编译期依赖时，那条依赖写在它自己的 `CMakeLists` 链接行上，不写在
+建适配器的那个函数里 —— 依赖变了不必回头改那段代码。
 
 **种类枚举就是配置取值**：QuantTrading 的配置模型（`Model/Configs/*.xml`）把 `DbType` 声明成
 `int`，生成出来的 `Config` 逐字读它，取值即 `DbTypeType` 的枚举值 —— 两处是同一个数，故消费方
@@ -168,18 +172,24 @@ Debug 与 Release 取到同一个值。
 > `asInt()` 遇上字符串会抛 `LogicError`，而抛出点同样在宿主 `try` 之外，实测退出码
 > `0xC0000409`、日志 **0 字节**、无任何提示。凡手工持有旧配置处都要把值改成裸整数。
 
-**DuckDB 与 SQLite 为什么不装载**：
+**装载 ≠ 不链接**：QuantTrading 的 `MdReader` 仍把 `DuckdbWrapper` 当成员类型用（编译期依赖），
+故该模块既在导入表里、又被装载器 `dlopen` —— 同一模块，第二次取到的是已加载的句柄。
+`SqliteWrapper` 没有这层依赖，链接行里留着它是为了随 `$<TARGET_RUNTIME_DLLS>` 拷进
+`bin/$<CONFIG>`，让全新克隆的默认路径不缺文件（§八）。MySQL 与 MariaDB 有意不列。
 
-- DuckDB **不是**可选后端 —— 行情读取无条件用 `DuckdbWrapper(":memory:")`，每轮回测都走；
-  QuantTrading 的 `MdReader` 直接把它当成员类型用，装载与导入表会同时指向同一模块。
-- SQLite 是回测写结果走的那条路，也是 `DbType` 的缺省值。把它挪到运行时装载，等于让最常见的
-  那条路多担一次解析风险，换来的空间只有约 1.1 MB。
+**Linux 上的实测落点**：装载器的两条候选（模块目录 / 裸名）在这些机器上都没命中引擎目录，
+最终由消费方的 `RUNPATH` 落到本库的安装树 —— `LD_DEBUG=libs` 实测 `libSqliteWrapper.so` 从
+`/…/Libs/DbAdapters/x64-linux/lib` 装载，而全树没有任何二进制把 `SqliteWrapper` 写进导入表，
+即这一次装载只可能来自装载器。**发运 Linux 引擎包时要留意**：模块得摆在引擎模块旁边，否则就要
+靠 `RUNPATH` 指到本库的安装树。
 
 **失败出口是空指针，不是异常**：调用链上适配器是在 `SimExchange` 构造函数里建的，抛出点不在
 宿主的 `try` 作用域内，异常会一路走到 `std::terminate`。而在 Windows 上那是 `abort`，它既不
 flush stdio 缓冲、也不走日志器线程的 `ThreadExit`（日志器是后台线程 + 缓冲，落盘在 `ThreadExit`），
-写在抛出前的那条日志**会随进程一起消失**。实测 `DbType="9"`：退出码 `0xC0000409`、日志 0 字节。
-故消费方要「写日志 + 返回空指针」，由引擎既有的判空通路接管，进程正常退出，文案才落得进日志。
+写在抛出前的那条日志**会随进程一起消失**。故消费方要「写日志 + 返回空指针」，由引擎既有的判空
+通路接管，进程正常退出，文案才落得进日志。抛出那条路的历史实测（字符串时代的 `DbType="9"`）：
+退出码 `0xC0000409`、日志 0 字节；换成「写日志 + 返回空指针」之后，同样的坏取值实测退出码 `1`，
+日志里留有那条 ERROR。
 
 ## 八、代价
 

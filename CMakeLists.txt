@@ -75,6 +75,26 @@ target_link_libraries(DuckdbWrapper PUBLIC DbInterface PRIVATE Spark::Core duckd
 target_link_libraries(SqliteWrapper PUBLIC DbInterface PRIVATE Spark::Core unofficial::sqlite3::sqlite3)
 target_link_libraries(MysqlWrapper PUBLIC DbInterface PRIVATE Spark::Core unofficial::mysql-connector-cpp::connector protobuf::libprotobuf LZ4::lz4 zstd::libzstd)
 
+# connector 把 OpenSSL / ZLIB / resolv 等声明成 $<LINK_ONLY:...> (见它的 config), 而 CMake 不把
+# LINK_ONLY 项放进共享库消费方的链接行 —— 该属性里同样没到链接行的还有 rapidjson / Threads.
+# 需求因此静默消失: 共享库允许未定义符号, 实测 libMysqlWrapper.so 带着 43 个未定义的 SSL/CRYPTO
+# 符号链接成功, 直到 dlopen 才失败 (undefined symbol: GENERAL_NAME_free).
+# 判据写的是"connector 是静态库"而非平台 —— Windows 那份是 SHARED IMPORTED, 这些符号由
+# mysqlcppconnx DLL 自己带, 本仓无需补链; 换 triplet 后这条判断仍成立.
+get_target_property(_mysql_connector_library_kind unofficial::mysql-connector-cpp::connector TYPE)
+if(_mysql_connector_library_kind STREQUAL "STATIC_LIBRARY")
+    # 下面三个是 ldd -r 逐个反查出来的, 不是照上游清单抄的: OpenSSL 43 个 (SSL_ 与 EVP_/CRYPTO_
+    # 两族), zlib 8 个 (inflate/deflate 系), resolv 2 个 (ns_initparse/ns_parserr).
+    # 上游清单里的 rapidjson 是纯头文件, 不产生链接需求; dl 已并入 glibc 2.34+ 的 libc, 实测无残留.
+    find_package(OpenSSL REQUIRED)
+    find_package(ZLIB REQUIRED)
+    target_link_libraries(MysqlWrapper PRIVATE OpenSSL::SSL OpenSSL::Crypto ZLIB::ZLIB)
+    # 上游 config 是在"非 Windows 且非 FreeBSD"时补 resolv;dl 的, 这里同样只在系统提供它时补
+    if(NOT WIN32 AND NOT CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
+        target_link_libraries(MysqlWrapper PRIVATE resolv)
+    endif()
+endif()
+
 
 target_link_libraries(MariadbWrapper PUBLIC DbInterface PRIVATE Spark::Core unofficial::mariadb-connector-cpp::mariadbcpp)
 
@@ -127,12 +147,15 @@ write_basic_package_version_file(
 
 # 生成 DbAdaptersConfig.cmake
 # find_dependency 使 vcpkg 注册这些包，applocal 才能自动拷贝 DLL
+# OpenSSL: MysqlWrapper 是共享库, 它的 PRIVATE 依赖会被记进导出集 (记为 $<LINK_ONLY:...>),
+# 消费方的 find_package(DbAdapters) 因此会遇到 OpenSSL::SSL 这个名字.
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
     "include(CMakeFindDependencyMacro)\n"
     "find_dependency(unofficial-sqlite3 CONFIG)\n"
     "find_dependency(unofficial-mysql-connector-cpp CONFIG)\n"
     "find_dependency(unofficial-mariadb-connector-cpp CONFIG)\n"
     "find_dependency(ZLIB)\n"
+    "find_dependency(OpenSSL)\n"
     "include(\"\${CMAKE_CURRENT_LIST_DIR}/${PROJECT_NAME}Targets.cmake\")\n"
     "set(${PROJECT_NAME}_FOUND TRUE)\n"
 )
