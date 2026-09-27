@@ -44,6 +44,28 @@ All four adapters inherit the unified `DB` interface — switching databases onl
 
 > The MySQL adapter uses the **X DevAPI** (`mysqlx://` protocol; the server must enable the X Plugin, default port 33060). The MariaDB adapter uses the classic `tcp://` protocol (default port 3306).
 
+#### Loading a backend at runtime (so a backend can be left out of a release)
+
+When all four adapters are linked, they and their client libraries enter the address space the moment the **process loads** — even if the current configuration only uses one of them. To make a backend "referenced per configuration, optionally absent from a release", load it **at runtime** by name:
+
+```cpp
+#include <DbAdapters/BackendLoader/DbBackendLoader.h>
+
+// Load by backend kind: the kind comes from Spark's DbTypeType (this library keeps no
+// enum of its own); the module name — including the .dll/.so suffix and the debug
+// postfix — is assembled by the loader itself, not by the caller.
+DbAdapters::Db* backend = DbAdapters::LoadDatabaseBackend(
+    DbTypeType::MysqlDb, "mysqlx://user:pass@localhost:33060/mdb", "", "");
+// ... use backend ...
+delete backend;
+```
+
+The loader is a **static library** (CMake target `DbAdapters::BackendLoaderStatic`); consumers must link it. Failure always throws `std::runtime_error`, naming the paths tried and the platform reason. The returned `Db*` is owned by the caller and released with `delete` (`Db`'s destructor is public virtual; both platforms use a dynamic runtime, so cross-module delete is safe). **Never unload** a module loaded this way (neither `FreeLibrary` nor `dlclose` is called).
+
+A second, **lower-level entry** loads by module base name (`LoadDatabaseBackend("MysqlWrapper", …)`); it exists so this library's own tests can construct the "module does not exist" case. Normal callers use the kind-based one above.
+
+For the entry-point contract, the two-step search order, the platform differences and the known limits, see [`docs/backend-runtime-loading.md`](docs/backend-runtime-loading.md) (Chinese).
+
 ### 2.3 AsyncDbWriter — Async Persistence
 
 The key component that flushes "in-memory database changes" to disk asynchronously:
@@ -68,12 +90,14 @@ The in-memory database broadcasts every change through `MdbSubscriber`; `AsyncDb
 DBAdapters/
 ├── include/DbAdapters/           # Public headers
 │   ├── DbInterface/              # Unified interface layer (DB, Schema, TypedTable, SchemaRegistry, etc.)
+│   ├── BackendLoader/            # Runtime backend loading (static library; platform code stays in the .cpp)
 │   ├── AsyncDbWriter/            # Async writer component
 │   ├── SqliteWrapper/            # SQLite adapter
 │   ├── DuckdbWrapper/            # DuckDB adapter
 │   ├── MysqlWrapper/             # MySQL adapter
 │   └── MariadbWrapper/           # MariaDB adapter
 ├── src/DbAdapters/               # Source code
+│   ├── BackendLoader/            # Runtime loading implementation
 │   ├── AsyncDbWriter/            # Async writer implementation
 │   ├── SqliteWrapper/            # SQLite adapter implementation
 │   ├── DuckdbWrapper/            # DuckDB adapter implementation (incl. vectorized reads)
@@ -83,6 +107,7 @@ DBAdapters/
 │   ├── TestDB/                   # All-in-one integration tests for four DBs + DuckDB vectorized-read tests
 │   └── CMakeLists.txt
 ├── docs/                         # Documentation
+│   ├── backend-runtime-loading.md # Runtime backend loading (design notes, Chinese)
 │   ├── environment-setup.md      # Environment setup guide (Chinese)
 │   └── environment-setup.en.md   # Environment setup guide (English)
 ├── submodules/                   # Submodule dependencies (CMakeCommon)

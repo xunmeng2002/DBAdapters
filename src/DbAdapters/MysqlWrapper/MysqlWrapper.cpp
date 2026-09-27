@@ -1,5 +1,7 @@
 #include <DbAdapters/MysqlWrapper/MysqlWrapper.h>
 
+#include <DbAdapters/DbInterface/DbBackendFactory.h>
+
 #include <Spark/Core/Logger/Logger.h>
 
 #include <mysqlx/xdevapi.h>
@@ -346,4 +348,16 @@ void MysqlWrapper::SelectWithSql(const char* sql, const TableSchema* schema, voi
     auto result = impl_->session.sql(sql).execute();
     ReadResultRows(result, schema, recordsList, factory);
 }
+}
+
+// 契约见 DbAdapters/DbInterface/DbBackendFactory.h. 必须留在 namespace 之外, 且异常不得逃出去:
+// 让 C++ 异常穿过 extern "C" 边界是未定义行为 (本后端构造函数的连接失败就是 throw 的).
+extern "C" MYSQLWRAPPER_EXPORTS DbAdapters::Db* DbAdapters_CreateBackend(const char* connectionTarget,
+    const char* /*userName*/, const char* /*password*/, char* failureText, int failureTextCapacity)
+{
+    return DbAdapters::CreateBackendOrReportFailure(failureText, failureTextCapacity,
+        [connectionTarget]
+        {
+            return new DbAdapters::MysqlWrapper(DbAdapters::ConnectionTargetOrEmpty(connectionTarget));
+        });
 }

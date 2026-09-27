@@ -44,6 +44,8 @@ add_shared_module(MariadbWrapper		${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CU
 add_shared_module(DuckdbWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/DuckdbWrapper)
 add_shared_module(SqliteWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/SqliteWrapper)
 
+add_static_md_module(BackendLoader		${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/BackendLoader)
+
 if(WIN32)
     find_package(Spark REQUIRED PATHS "../Libs/Spark/x64-windows")
     find_package(duckdb CONFIG REQUIRED PATHS "../Libs/duckdb/x64-windows")
@@ -61,6 +63,14 @@ find_package(zstd CONFIG REQUIRED)
 
 # 各 wrapper 的后端错误（连接失败/语句失败）经 FailureLogThrottle 走 Spark 日志上报，故统一私有链接 Spark::Core
 target_link_libraries(AsyncDbWriter PRIVATE Spark::Core)
+# BackendLoader 的后端种类形参直接用 Spark 的 DbTypeType (公开头上就写着), 私有链接取它的头路径.
+# 消费方本就是 Spark 系工程, 各自链接 Spark::Core.
+target_link_libraries(BackendLoaderStatic PUBLIC DbInterface PRIVATE Spark::Core)
+# 后端模块文件名的调试后缀由本库自己拼, 不留给消费方 —— 消费方无从知道 CMAKE_DEBUG_POSTFIX 是本库
+# 设的, 各推一遍就会推出 Debug 构装修到 Release 那份模块的失效. PUBLIC 故随导出集传给消费方.
+# 生成器表达式而非裸变量: 单配置生成器(Ninja)下裸变量会让 Debug/Release 取到同一个值.
+target_compile_definitions(BackendLoaderStatic PUBLIC
+    BACKENDLOADER_FILENAME_DEBUG_POSTFIX="$<$<CONFIG:Debug>:${CMAKE_DEBUG_POSTFIX}>")
 target_link_libraries(DuckdbWrapper PUBLIC DbInterface PRIVATE Spark::Core duckdb::duckdb)
 target_link_libraries(SqliteWrapper PUBLIC DbInterface PRIVATE Spark::Core unofficial::sqlite3::sqlite3)
 target_link_libraries(MysqlWrapper PUBLIC DbInterface PRIVATE Spark::Core unofficial::mysql-connector-cpp::connector protobuf::libprotobuf LZ4::lz4 zstd::libzstd)
@@ -94,7 +104,7 @@ message("Build timestamp is ${BUILD_TIMESTAMP}")
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(TARGETS
-    AsyncDbWriter DbInterface DuckdbWrapper SqliteWrapper MysqlWrapper MariadbWrapper
+    AsyncDbWriter DbInterface BackendLoaderStatic DuckdbWrapper SqliteWrapper MysqlWrapper MariadbWrapper
     EXPORT ${PROJECT_NAME}Targets
     #CONFIGURATIONS Release
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}

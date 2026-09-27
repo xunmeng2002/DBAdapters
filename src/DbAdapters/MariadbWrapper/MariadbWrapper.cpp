@@ -1,5 +1,7 @@
 #include <DbAdapters/MariadbWrapper/MariadbWrapper.h>
 
+#include <DbAdapters/DbInterface/DbBackendFactory.h>
+
 #include <Spark/Core/Logger/Logger.h>
 
 #include <mariadb/conncpp.hpp>
@@ -419,4 +421,19 @@ void MariadbWrapper::SelectWithSql(const char* sql, const TableSchema* schema, v
     auto result = std::unique_ptr<sql::ResultSet>(impl_->m_Statement->executeQuery(sql));
     ReadResultRows(result.get(), schema, recordsList, factory);
 }
+}
+
+// 契约见 DbAdapters/DbInterface/DbBackendFactory.h. 必须留在 namespace 之外, 且异常不得逃出去:
+// 让 C++ 异常穿过 extern "C" 边界是未定义行为 (本后端构造函数的连接失败就是 throw 的).
+extern "C" MARIADBWRAPPER_EXPORTS DbAdapters::Db* DbAdapters_CreateBackend(const char* connectionTarget,
+    const char* userName, const char* password, char* failureText, int failureTextCapacity)
+{
+    return DbAdapters::CreateBackendOrReportFailure(failureText, failureTextCapacity,
+        [connectionTarget, userName, password]
+        {
+            return new DbAdapters::MariadbWrapper(
+                DbAdapters::ConnectionTargetOrEmpty(connectionTarget),
+                DbAdapters::ConnectionTargetOrEmpty(userName),
+                DbAdapters::ConnectionTargetOrEmpty(password));
+        });
 }

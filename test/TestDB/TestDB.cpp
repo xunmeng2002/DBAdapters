@@ -3,6 +3,7 @@
 #include <DbAdapters/DuckdbWrapper/DuckdbWrapper.h>
 #include <DbAdapters/MysqlWrapper/MysqlWrapper.h>
 #include <DbAdapters/MariadbWrapper/MariadbWrapper.h>
+#include <DbAdapters/BackendLoader/DbBackendLoader.h>
 #include <DbAdapters/DbInterface/TypedTable.h>
 #include <DbAdapters/DbInterface/SchemaRegistry.h>
 #include <DbAdapters/AsyncDbWriter/AsyncDbWriter.h>
@@ -941,6 +942,69 @@ static void TestFailureVisibility()
     WriteLog(LogLevel::Info, "===== 失败可见性验证结束 =====");
 }
 
+// 两条装载入口共用一个判定: 装载动作由调用方以可调用对象给出, 免得"按种类"与"按基名"两处
+// 各写一遍成功/失败的判定 (那边四个用例、这边一个, 复制粘贴就是五份).
+template <typename BackendLoader>
+static bool LoadBackendAndReport(const char* backendLabel, bool expectConstructed, BackendLoader loadBackend)
+{
+    try
+    {
+        Db* backend = loadBackend();
+        delete backend;
+        if (!expectConstructed)
+        {
+            WriteLog(LogLevel::Error, "TestBackendLoader[%s] FAILED: 期望构造失败, 实际成功", backendLabel);
+            return false;
+        }
+        WriteLog(LogLevel::Info, "TestBackendLoader[%s] 构造成功", backendLabel);
+        return true;
+    }
+    catch (const std::exception& loadFailure)
+    {
+        const char* failureReason = loadFailure.what();
+        if (expectConstructed)
+        {
+            WriteLog(LogLevel::Error, "TestBackendLoader[%s] FAILED: 期望成功, 实际失败: %s",
+                backendLabel, failureReason);
+            return false;
+        }
+        if (failureReason == nullptr || failureReason[0] == '\0')
+        {
+            WriteLog(LogLevel::Error, "TestBackendLoader[%s] FAILED: 失败但未给出原因", backendLabel);
+            return false;
+        }
+        WriteLog(LogLevel::Info, "TestBackendLoader[%s] 如期失败: %s", backendLabel, failureReason);
+        return true;
+    }
+}
+
+// 运行时装载验证: 四个后端各走一次装载器, 含"异常不跨 C ABI"这条约束的可执行证据.
+// 前三条走按后端种类的常路入口 (模块基名与调试后缀都由装载器自己拼), 第四条走按基名的低层入口.
+static bool TestBackendLoader()
+{
+    bool allPassed = true;
+    allPassed &= LoadBackendAndReport("Sqlite(按种类)", true,
+        [] { return LoadDatabaseBackend(DbTypeType::SqliteDb, sqliteDbName, "", ""); });
+    allPassed &= LoadBackendAndReport("Duckdb(按种类)", true,
+        [] { return LoadDatabaseBackend(DbTypeType::DuckDb, ":memory:", "", ""); });
+    // 空连接串: mysqlx 解析不出 USER, 构造函数必抛, 且不依赖本机是否跑着 MySQL.
+    allPassed &= LoadBackendAndReport("Mysql(按种类)", false,
+        [] { return LoadDatabaseBackend(DbTypeType::MysqlDb, "", "", ""); });
+    // 低层入口专留这一条: 按种类造不出"模块根本不存在", 而那正是部署时最可能撞上的报错.
+    allPassed &= LoadBackendAndReport("NoSuchBackendModule(按基名)", false,
+        [] { return LoadDatabaseBackend("NoSuchBackendModule", "", "", ""); });
+
+    if (allPassed)
+    {
+        WriteLog(LogLevel::Info, "TestBackendLoader PASS");
+    }
+    else
+    {
+        WriteLog(LogLevel::Error, "TestBackendLoader FAILED");
+    }
+    return allPassed;
+}
+
 int main(int argc, char* argv[])
 {
 	Logger::GetInstance().Init(argv[0]);
@@ -957,10 +1021,11 @@ int main(int argc, char* argv[])
     TestDuckdbNarrowSaturation();
     TestDuckdbNarrowColumnTypes();
     TestFailureVisibility();
+    const bool backendLoaderPassed = TestBackendLoader();
     //TestMysql();
     //TestMariadb();
 
 	Logger::GetInstance().Stop();
 	Logger::GetInstance().Join();
-	return 0;
+	return backendLoaderPassed ? 0 : 1;
 }

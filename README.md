@@ -44,6 +44,33 @@ Created by [Fireseeker](https://fireseeker.cn/)
 
 > MySQL 适配器使用 **X DevAPI**（`mysqlx://` 协议，需服务端开启 X Plugin，默认端口 33060）；MariaDB 适配器使用经典 `tcp://` 协议（默认端口 3306）。
 
+#### 运行时按配置装载（让某个后端可以不随包发运）
+
+四个适配器若全部被链接，它们连同各自的客户端库会在**进程加载那一刻**就全部进地址空间 ——
+即便当前配置只走其中一个。要让某个后端"按配置引用、可以不随包发运"，就在**运行时**按名字装载它：
+
+```cpp
+#include <DbAdapters/BackendLoader/DbBackendLoader.h>
+
+// 按后端种类装载：种类取自 Spark 的 DbTypeType（本库不自备枚举），模块名（含 .dll/.so 与
+// 调试后缀）全由装载器自己拼，调用方不参与。
+DbAdapters::Db* backend = DbAdapters::LoadDatabaseBackend(
+    DbTypeType::MysqlDb, "mysqlx://user:pass@localhost:33060/mdb", "", "");
+// ... 使用 backend ...
+delete backend;
+```
+
+装载器是**静态库**（CMake 目标 `DbAdapters::BackendLoaderStatic`），消费方需要链接它。
+装载失败一律抛 `std::runtime_error`，文案含"试过哪些路径"与平台给出的原因。成功取到的 `Db*`
+由调用方持有并 `delete`（`Db` 的析构是 public virtual，两平台均为动态运行库，跨模块 delete 安全）。
+**不要卸载**装载进来的模块（`FreeLibrary` / `dlclose` 一概不调）。
+
+另有一条**低层入口**按模块基名装载（`LoadDatabaseBackend("MysqlWrapper", …)`），供本库自己的
+测试构造"模块根本不存在"这一情形；正常调用请用上面按种类的那条。
+
+契约、两步查找次序、平台差异与已知边界的完整说明见
+[`docs/backend-runtime-loading.md`](docs/backend-runtime-loading.md)。
+
 ### 3. AsyncDbWriter —— 异步写库
 
 把"内存库变更"异步落盘的关键组件：
@@ -68,12 +95,14 @@ Created by [Fireseeker](https://fireseeker.cn/)
 DBAdapters/
 ├── include/DbAdapters/           # 对外暴露头文件
 │   ├── DbInterface/              # 统一接口层（DB、Schema、TypedTable、SchemaRegistry 等）
+│   ├── BackendLoader/            # 运行时按配置装载后端（静态库，平台差异收在 .cpp 内）
 │   ├── AsyncDbWriter/            # 异步写库组件
 │   ├── SqliteWrapper/            # SQLite 适配器
 │   ├── DuckdbWrapper/            # DuckDB 适配器
 │   ├── MysqlWrapper/             # MySQL 适配器
 │   └── MariadbWrapper/           # MariaDB 适配器
 ├── src/DbAdapters/               # 源码实现
+│   ├── BackendLoader/            # 运行时装载实现
 │   ├── AsyncDbWriter/            # 异步写库实现
 │   ├── SqliteWrapper/            # SQLite 适配器实现
 │   ├── DuckdbWrapper/            # DuckDB 适配器实现（含向量化读取）
@@ -83,6 +112,7 @@ DBAdapters/
 │   ├── TestDB/                   # 四库一体化集成测试 + DuckDB 向量化读取测试
 │   └── CMakeLists.txt
 ├── docs/                         # 文档
+│   ├── backend-runtime-loading.md # 后端运行时按配置装载（设计说明）
 │   ├── environment-setup.md      # 环境准备指南（中文）
 │   └── environment-setup.en.md   # 环境准备指南（英文）
 ├── submodules/                   # 子模块依赖（CMakeCommon）
@@ -446,6 +476,7 @@ int main()
 | `TestMariadb` | MariaDB 全流程 CRUD（需本机 MariaDB，默认注释关闭） |
 | `TestDuckdbVectorized` | 向量化读取：类型转换、NULL 哨兵、错误透出 |
 | `TestDuckdbVectorizedMultiChunk` | 多 chunk 回退路径：BIGINT→Char、DOUBLE→Int64 跨 chunk 行索引正确性 |
+| `TestBackendLoader` | 运行时装载：按种类的常路入口装载成功的后端返回可用对象；构造失败的后端返回可读原因而非让异常穿过 C 边界；另有一条按基名的低层入口覆盖"模块根本不存在"，文案须含两条候选路径。失败会反映到进程退出码 |
 
 ### 运行测试
 
