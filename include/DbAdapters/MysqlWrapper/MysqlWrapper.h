@@ -1,6 +1,7 @@
 #pragma once
 #include <DbAdapters/MysqlWrapper/MysqlWrapperExport.h>
 #include <DbAdapters/DbInterface/Db.h>
+#include <memory>
 #include <string>
 
 
@@ -34,7 +35,7 @@ public:
 
 private:
     struct Impl;
-    Impl* impl_;
+    std::unique_ptr<Impl> impl_;
     std::string host_;
 };
 }

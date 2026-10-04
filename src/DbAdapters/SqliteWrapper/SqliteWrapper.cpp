@@ -9,6 +9,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <sstream>
 
 
@@ -190,7 +191,7 @@ struct SqliteWrapper::Impl
 };
 
 SqliteWrapper::SqliteWrapper(const std::string& dbName)
-	: impl_(new Impl)
+	: impl_(std::make_unique<Impl>())
 {
 	int rc = sqlite3_open(dbName.c_str(), &impl_->db);
 	if (rc != SQLITE_OK)
@@ -217,7 +218,6 @@ SqliteWrapper::SqliteWrapper(const std::string& dbName)
 SqliteWrapper::~SqliteWrapper()
 {
 	DisConnect();
-	delete impl_;
 }
 
 bool SqliteWrapper::Connect()

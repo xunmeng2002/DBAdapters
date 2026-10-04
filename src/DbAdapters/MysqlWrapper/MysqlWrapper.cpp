@@ -7,6 +7,7 @@
 #include <mysqlx/xdevapi.h>
 
 #include <cstring>
+#include <memory>
 #include <sstream>
 #include <vector>
 
@@ -230,7 +231,7 @@ MysqlWrapper::MysqlWrapper(const std::string& host)
     // Session 构造即建连，失败抛异常；记录后继续抛出，保持调用方原有的失败感知（本 wrapper 的 Connect 不建连）
     try
     {
-        impl_ = new Impl(mysqlx::Session(host));
+        impl_ = std::make_unique<Impl>(mysqlx::Session(host));
     }
     catch (const std::exception& e)
     {
@@ -241,7 +242,6 @@ MysqlWrapper::MysqlWrapper(const std::string& host)
 MysqlWrapper::~MysqlWrapper()
 {
     DisConnect();
-    delete impl_;
 }
 
 bool MysqlWrapper::Connect()

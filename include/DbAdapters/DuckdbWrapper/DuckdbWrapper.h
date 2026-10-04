@@ -1,6 +1,7 @@
 #pragma once
 #include <DbAdapters/DuckdbWrapper/DuckdbWrapperExport.h>
 #include <DbAdapters/DbInterface/Db.h>
+#include <memory>
 #include <string>
 
 
@@ -40,6 +41,6 @@ public:
 
 private:
     struct Impl;
-    Impl* impl_;
+    std::unique_ptr<Impl> impl_;
 };
 }

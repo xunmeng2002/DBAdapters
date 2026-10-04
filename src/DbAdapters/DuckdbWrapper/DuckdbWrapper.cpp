@@ -9,6 +9,7 @@
 
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <sstream>
 #include <vector>
 
@@ -694,7 +695,7 @@ struct DuckdbWrapper::Impl
 };
 
 DuckdbWrapper::DuckdbWrapper(const std::string& dbName)
-    : impl_(new Impl)
+    : impl_(std::make_unique<Impl>())
 {
     if (duckdb_open(dbName.c_str(), &impl_->database) != DuckDBSuccess)
     {
@@ -712,7 +713,6 @@ DuckdbWrapper::DuckdbWrapper(const std::string& dbName)
 DuckdbWrapper::~DuckdbWrapper()
 {
     DisConnect();
-    delete impl_;
 }
 
 bool DuckdbWrapper::Connect()
