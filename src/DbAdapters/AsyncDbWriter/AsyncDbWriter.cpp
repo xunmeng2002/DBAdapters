@@ -2,10 +2,33 @@
 #include "DbOperateImpl.h"
 #include <Spark/Core/Logger/Logger.h>
 #include <cstring>
+#include <memory>
 #include <vector>
 
 using namespace std;
 using namespace Spark::Core;
+
+namespace
+{
+void ReleaseDbOperate(DbAdapters::DbOperate* dbOperate) noexcept
+{
+	if (dbOperate == nullptr)
+	{
+		return;
+	}
+	try
+	{
+		dbOperate->DeallocateRecord();
+	}
+	catch (...)
+	{
+		WriteLog(LogLevel::Error, "AsyncDbWriter: DeallocateRecord failed. TableId:0x%X", dbOperate->TableId);
+	}
+	dbOperate->Deallocate();
+}
+
+using DbOperateHandle = unique_ptr<DbAdapters::DbOperate, decltype(&ReleaseDbOperate)>;
+}
 
 namespace DbAdapters
 {
@@ -57,21 +80,41 @@ void AsyncDbWriter::DisConnect()
 	connected_ = false;
 	if (dbSubscriber_ != nullptr)
 	{
-		dbSubscriber_->OnDbDisConnected();
+		try
+		{
+			dbSubscriber_->OnDbDisConnected();
+		}
+		catch (const exception& e)
+		{
+			WriteLog(LogLevel::Error, "AsyncDbWriter: OnDbDisConnected throw. Message:%s", e.what());
+		}
 	}
-	db_->DisConnect();
-	lock_guard<mutex> guard(mutex_);
-	const size_t pendingCount = dbOperates_.size();
-	for (auto item : dbOperates_)
+	DropPendingOperates();
+	try
 	{
-		item->DeallocateRecord();
-		item->Deallocate();
+		db_->DisConnect();
 	}
-	dbOperates_.clear();
-	if (pendingCount > 0)
+	catch (const exception& e)
+	{
+		WriteLog(LogLevel::Error, "AsyncDbWriter: Db DisConnect throw. Message:%s", e.what());
+	}
+}
+void AsyncDbWriter::DropPendingOperates()
+{
+	list<DbOperate*> droppedOperates;
+	{
+		lock_guard<mutex> guard(mutex_);
+		droppedOperates.swap(dbOperates_);
+	}
+	const size_t droppedCount = droppedOperates.size();
+	for (DbOperate* item : droppedOperates)
+	{
+		ReleaseDbOperate(item);
+	}
+	if (droppedCount > 0)
 	{
 		// 这里会连同队列一起丢弃，不记录的话丢数据只能从"库里的行数比预期少"反推
-		WriteLog(LogLevel::Warning, "AsyncDbWriter: DisConnect discarded %d pending operations.", (int)pendingCount);
+		WriteLog(LogLevel::Warning, "AsyncDbWriter: DisConnect discarded %d pending operations.", (int)droppedCount);
 	}
 }
 
@@ -148,9 +191,22 @@ void AsyncDbWriter::OnRecordTruncate(unsigned int tableID)
 
 void AsyncDbWriter::Run()
 {
-	CheckConnect();
-	CheckDbOperate();
-	HandleDbOperate();
+	try
+	{
+		CheckConnect();
+		CheckDbOperate();
+		HandleDbOperate();
+	}
+	catch (const exception& e)
+	{
+		WriteLog(LogLevel::Error, "AsyncDbWriter: unexpected exception escaped, retry after backoff. Message:%s", e.what());
+		this_thread::sleep_for(chrono::seconds(1));
+	}
+	catch (...)
+	{
+		WriteLog(LogLevel::Error, "AsyncDbWriter: unknown exception escaped, retry after backoff.");
+		this_thread::sleep_for(chrono::seconds(1));
+	}
 }
 void AsyncDbWriter::CheckConnect()
 {
@@ -162,7 +218,6 @@ void AsyncDbWriter::CheckConnect()
 	{
 		return;
 	}
-	// 未连接期间 HandleDbOperate 每轮都整队丢弃（见其入口分支），此处按固定尝试次数节流上报积压规模
 	const int connectFailureCount = connectFailureLogThrottle_.RegisterFailure();
 	if (connectFailureCount > 0)
 	{
@@ -193,43 +248,40 @@ void AsyncDbWriter::HandleDbOperate()
 		return;
 	}
 	DbOperate* dbOperate = nullptr;
-	try
+	while ((dbOperate = GetDbOperate()) != nullptr)
 	{
-		while ((dbOperate = GetDbOperate()) != nullptr)
+		DbOperateHandle dbOperateHandle(dbOperate, &ReleaseDbOperate);
+		try
 		{
-			switch (dbOperate->Operate)
-			{
-			case DbOperateType::CreateTables:		CreateTables(dbOperate); break;
-			case DbOperateType::DropTables:			DropTables(dbOperate); break;
-			case DbOperateType::TruncateTables:		TruncateTables(dbOperate); break;
-			case DbOperateType::Insert:				InsertRecord(dbOperate); break;
-			case DbOperateType::Delete:				DeleteRecord(dbOperate); break;
-			case DbOperateType::DeleteByIndex:		DeleteRecordByIndex(dbOperate); break;
-			case DbOperateType::Update:				UpdateRecord(dbOperate); break;
-			case DbOperateType::BatchInsert:		BatchInsertRecords(dbOperate); break;
-			case DbOperateType::Truncate:			TruncateTable(dbOperate); break;
-			default:
-				WriteLog(LogLevel::Warning, "Unknown DbOperateType:%d", dbOperate->Operate);
-				break;
-			}
-			dbOperate->Deallocate();
+			ExecuteDbOperate(dbOperate);
+		}
+		catch (const exception& e)
+		{
+			const TableSchema* failedSchema = schemaRegistry_ != nullptr ? schemaRegistry_->GetSchema(dbOperate->TableId) : nullptr;
+			WriteLog(LogLevel::Error, "AsyncDbWriter: HandleDbOperate failed. TableId:0x%X, Table:%s, Operate:%d, Message:%s",
+				dbOperate->TableId, failedSchema != nullptr ? failedSchema->tableName : "unknown", static_cast<int>(dbOperate->Operate), e.what());
+			DisConnect();
+			this_thread::sleep_for(chrono::seconds(5));
+			return;
 		}
 	}
-	catch(const exception& e)
+}
+void AsyncDbWriter::ExecuteDbOperate(DbOperate* dbOperate)
+{
+	switch (dbOperate->Operate)
 	{
-		const unsigned int failedTableID = dbOperate != nullptr ? dbOperate->TableId : 0;
-		const int failedOperateType = dbOperate != nullptr ? static_cast<int>(dbOperate->Operate) : -1;
-		const TableSchema* failedSchema = schemaRegistry_ != nullptr ? schemaRegistry_->GetSchema(failedTableID) : nullptr;
-		WriteLog(LogLevel::Error, "AsyncDbWriter: HandleDbOperate failed. TableId:0x%X, Table:%s, Operate:%d, Message:%s",
-			failedTableID, failedSchema != nullptr ? failedSchema->tableName : "unknown", failedOperateType, e.what());
-		// DisConnect 会连同队列一起丢弃并上报丢弃条数
-		DisConnect();
-		if (dbOperate != nullptr)
-		{
-			dbOperate->DeallocateRecord();
-			dbOperate->Deallocate();
-		}
-		this_thread::sleep_for(chrono::seconds(5));
+	case DbOperateType::CreateTables:		CreateTables(dbOperate); break;
+	case DbOperateType::DropTables:			DropTables(dbOperate); break;
+	case DbOperateType::TruncateTables:		TruncateTables(dbOperate); break;
+	case DbOperateType::Insert:				InsertRecord(dbOperate); break;
+	case DbOperateType::Delete:				DeleteRecord(dbOperate); break;
+	case DbOperateType::DeleteByIndex:		DeleteRecordByIndex(dbOperate); break;
+	case DbOperateType::Update:				UpdateRecord(dbOperate); break;
+	case DbOperateType::BatchInsert:		BatchInsertRecords(dbOperate); break;
+	case DbOperateType::Truncate:			TruncateTable(dbOperate); break;
+	default:
+		WriteLog(LogLevel::Warning, "Unknown DbOperateType:%d", dbOperate->Operate);
+		break;
 	}
 }
 DbOperate* AsyncDbWriter::GetDbOperate()
@@ -304,7 +356,6 @@ void AsyncDbWriter::DeleteRecord(DbOperate* dbOperate)
 	if (schema)
 	{
 		db_->Delete(schema, dbOperate->Record, schema->primaryKeyIndices, schema->primaryKeyCount);
-		schema->DeallocateRecord(dbOperate->Record);
 	}
 }
 
@@ -320,12 +371,10 @@ void AsyncDbWriter::DeleteRecordByIndex(DbOperate* dbOperate)
 			db_->Delete(schema, dbOperate->Record,
 			             schema->secondaryIndices[i].fieldIndices,
 			             schema->secondaryIndices[i].fieldCount);
-			schema->DeallocateRecord(dbOperate->Record);
 			return;
 		}
 	}
 	WriteLog(LogLevel::Error, "Incorrect TableId/IndexId for DeleteRecordByIndex. TableId:0x%X, IndexId:%d", dbOperate->TableId, dbOperate->IndexId);
-	schema->DeallocateRecord(dbOperate->Record);
 }
 void AsyncDbWriter::UpdateRecord(DbOperate* dbOperate)
 {
@@ -333,7 +382,6 @@ void AsyncDbWriter::UpdateRecord(DbOperate* dbOperate)
 	if (schema)
 	{
 		db_->Update(schema, dbOperate->Record);
-		schema->DeallocateRecord(dbOperate->Record);
 	}
 }
 void AsyncDbWriter::TruncateTable(DbOperate* dbOperate)

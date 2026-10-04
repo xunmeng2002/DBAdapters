@@ -45,7 +45,9 @@ private:
 	DbOperate* AllocateDbOperate();
 	void AddDbOperate(DbOperate* dbOperate);
 	int PendingOperateCount();
+	void DropPendingOperates();
 
+	void ExecuteDbOperate(DbOperate* dbOperate);
 	void CreateTables(DbOperate* dbOperate);
 	void DropTables(DbOperate* dbOperate);
 	void TruncateTables(DbOperate* dbOperate);
