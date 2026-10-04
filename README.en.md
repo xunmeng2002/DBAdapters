@@ -1,9 +1,9 @@
-# DBAdapters
+# DbAdapters
 [![License](https://img.shields.io/badge/License-BSD--4--Clause-blue.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/Language-C++20+-orange.svg)]()
 [![Build](https://img.shields.io/badge/Build-CMake3.20+-green.svg)]()
 
-**DBAdapters** is a unified **database access layer** built on top of the **Spark** foundational library. Designed for financial trading and risk-management systems, it provides consistent read/write encapsulation for four databases: **SQLite, DuckDB, MySQL, and MariaDB**. Through a three-layer abstraction — **table schema description (`TableSchema`) → typed table (`TypedTable`) → async writer (`AsyncDbWriter`)** — business code can create tables, perform CRUD, and persist asynchronously without writing SQL by hand, fitting naturally into the classic low-latency "in-memory database + persistent database" architecture.
+**DbAdapters** is a unified **database access layer** built on top of the **Spark** foundational library. Designed for financial trading and risk-management systems, it provides consistent read/write encapsulation for four databases: **SQLite, DuckDB, MySQL, and MariaDB**. Through a three-layer abstraction — **table schema description (`TableSchema`) → typed table (`TypedTable`) → async writer (`AsyncDbWriter`)** — business code can create tables, perform CRUD, and persist asynchronously without writing SQL by hand, fitting naturally into the classic low-latency "in-memory database + persistent database" architecture.
 
 Created by [Fireseeker](https://fireseeker.cn/)
 
@@ -87,7 +87,7 @@ The in-memory database broadcasts every change through `MdbSubscriber`; `AsyncDb
 ## 3. Project Directory Structure
 
 ```
-DBAdapters/
+DbAdapters/
 ├── include/DbAdapters/           # Public headers
 │   ├── DbInterface/              # Unified interface layer (DB, Schema, TypedTable, SchemaRegistry, etc.)
 │   ├── BackendLoader/            # Runtime backend loading (static library; platform code stays in the .cpp)
@@ -163,8 +163,8 @@ Dependencies declared in `vcpkg.json` (resolved automatically at build time, inc
 ### 5.1 Clone Repository (with Submodules)
 
 ```bash
-git clone --recursive https://gitee.com/xunmeng2002/DBAdapters.git
-cd DBAdapters
+git clone --recursive https://gitee.com/xunmeng2002/DbAdapters.git
+cd DbAdapters
 ```
 
 ### 5.2 Update Submodules (if not cloned recursively)
@@ -213,7 +213,7 @@ The test program runs the same CRUD flow against SQLite / DuckDB / MySQL / Maria
 ### 5.6 Install (Optional)
 
 ```bash
-# Linux (installs Debug / Release into ../Libs/DBAdapters/x64-linux)
+# Linux (installs Debug / Release into ../Libs/DbAdapters/x64-linux)
 sh Install.sh
 ```
 

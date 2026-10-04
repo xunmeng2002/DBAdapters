@@ -2,7 +2,7 @@
 
 > 本文档面向 **Windows（MSVC）** 和 **WSL（GCC）** 两个平台，说明从零搭建项目编译环境所需的全部步骤。
 
-> **项目依赖概览（DBAdapters）**：除下述通用工具链外，还需准备 **Spark** 基础库与 **DuckDB** 两个预编译依赖（分别安装到项目父目录 `../Libs/Spark/<triplet>`、`../Libs/duckdb/<triplet>`），并由 vcpkg 提供 `sqlite3`、`mysql-connector-cpp`、`mariadb-connector-cpp` 三个数据库驱动。完整说明见仓库根目录 [README](../README.md) 的"环境依赖"章节。
+> **项目依赖概览（DbAdapters）**：除下述通用工具链外，还需准备 **Spark** 基础库与 **DuckDB** 两个预编译依赖（分别安装到项目父目录 `../Libs/Spark/<triplet>`、`../Libs/duckdb/<triplet>`），并由 vcpkg 提供 `sqlite3`、`mysql-connector-cpp`、`mariadb-connector-cpp` 三个数据库驱动。完整说明见仓库根目录 [README](../README.md) 的"环境依赖"章节。
 
 ---
 
@@ -230,11 +230,11 @@ source ~/.bashrc
 在 WSL 终端直接运行 CMake 配置：
 
 ```bash
-cd /mnt/d/Gitee/DBAdapters
+cd /mnt/d/Gitee/DbAdapters
 cmake -S . -B out/build/WSL-GCC-Debug \
   -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
-  -DCMAKE_INSTALL_PREFIX=../Libs/DBAdapters/x64-linux \
+  -DCMAKE_INSTALL_PREFIX=../Libs/DbAdapters/x64-linux \
   -G Ninja
 ```
 

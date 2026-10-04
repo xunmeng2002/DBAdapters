@@ -1,9 +1,9 @@
-# DBAdapters
+# DbAdapters
 [![License](https://img.shields.io/badge/License-BSD--4--Clause-blue.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/Language-C++20+-orange.svg)]()
 [![Build](https://img.shields.io/badge/Build-CMake3.20+-green.svg)]()
 
-**DBAdapters** 是一套基于 **Spark** 基础库的统一**数据库访问层**，面向金融交易 / 风控系统，提供 **SQLite、DuckDB、MySQL、MariaDB** 四种数据库的一致性读写封装。通过"**表结构描述（TableSchema）→ 类型化表（TypedTable）→ 异步写库（AsyncDbWriter）**"三层抽象，业务代码无需手写 SQL 即可完成建表、增删改查与异步落盘，天然适配"内存数据库 + 持久化数据库"的经典低时延架构。
+**DbAdapters** 是一套基于 **Spark** 基础库的统一**数据库访问层**，面向金融交易 / 风控系统，提供 **SQLite、DuckDB、MySQL、MariaDB** 四种数据库的一致性读写封装。通过"**表结构描述（TableSchema）→ 类型化表（TypedTable）→ 异步写库（AsyncDbWriter）**"三层抽象，业务代码无需手写 SQL 即可完成建表、增删改查与异步落盘，天然适配"内存数据库 + 持久化数据库"的经典低时延架构。
 
 Created by [Fireseeker](https://fireseeker.cn/)
 
@@ -92,7 +92,7 @@ delete backend;
 ## 三、项目目录结构
 
 ```
-DBAdapters/
+DbAdapters/
 ├── include/DbAdapters/           # 对外暴露头文件
 │   ├── DbInterface/              # 统一接口层（DB、Schema、TypedTable、SchemaRegistry 等）
 │   ├── BackendLoader/            # 运行时按配置装载后端（静态库，平台差异收在 .cpp 内）
@@ -168,8 +168,8 @@ DBAdapters/
 ### 1. 克隆代码（含子模块）
 
 ```bash
-git clone --recursive https://gitee.com/xunmeng2002/DBAdapters.git
-cd DBAdapters
+git clone --recursive https://gitee.com/xunmeng2002/DbAdapters.git
+cd DbAdapters
 ```
 
 ### 2. 更新子模块（若未递归克隆）
@@ -218,7 +218,7 @@ cmake --build out/build/WSL-GCC-Release
 ### 6. 安装（可选）
 
 ```bash
-# Linux（安装 Debug / Release 到 ../Libs/DBAdapters/x64-linux）
+# Linux（安装 Debug / Release 到 ../Libs/DbAdapters/x64-linux）
 sh Install.sh
 ```
 

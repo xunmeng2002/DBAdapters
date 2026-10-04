@@ -2,7 +2,7 @@
 
 > This document covers both **Windows (MSVC)** and **WSL (GCC)** platforms, detailing every step required to set up the build environment from scratch.
 
-> **Dependency overview (DBAdapters)**: besides the generic toolchain below, two prebuilt dependencies are required — the **Spark** foundational library and **DuckDB** (installed under the project's parent directory at `../Libs/Spark/<triplet>` and `../Libs/duckdb/<triplet>`), plus the `sqlite3`, `mysql-connector-cpp`, and `mariadb-connector-cpp` drivers provided by vcpkg. See the "Environment Dependencies" section of the [README](../README.en.md) for details.
+> **Dependency overview (DbAdapters)**: besides the generic toolchain below, two prebuilt dependencies are required — the **Spark** foundational library and **DuckDB** (installed under the project's parent directory at `../Libs/Spark/<triplet>` and `../Libs/duckdb/<triplet>`), plus the `sqlite3`, `mysql-connector-cpp`, and `mariadb-connector-cpp` drivers provided by vcpkg. See the "Environment Dependencies" section of the [README](../README.en.md) for details.
 
 ---
 
@@ -230,11 +230,11 @@ source ~/.bashrc
 Run CMake configuration inside WSL:
 
 ```bash
-cd /mnt/d/Gitee/DBAdapters
+cd /mnt/d/Gitee/DbAdapters
 cmake -S . -B out/build/WSL-GCC-Debug \
   -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
-  -DCMAKE_INSTALL_PREFIX=../Libs/DBAdapters/x64-linux \
+  -DCMAKE_INSTALL_PREFIX=../Libs/DbAdapters/x64-linux \
   -G Ninja
 ```
 
