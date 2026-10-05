@@ -458,7 +458,7 @@ int main()
 }
 ```
 
-> **Record-ownership contract**: how a record is released travels with its record handle (`RecordHandle`) instead of being inferred from the operation type. The producer declares it at the handoff point: `AdoptRecord(record)` means the writer releases it from now on; `BorrowRecord(record)` means only the pointer is borrowed and the producer still releases it (use the latter when the in-memory table keeps holding the same record, otherwise the writer's release leaves the table with a dangling pointer). Every record in a batch insert carries its own handle and is released individually, so batches and single inserts share exactly the same ownership semantics.
+> **Record-ownership contract**: how a record is released travels with its record handle (`RecordHandle`) instead of being inferred from the operation type. The producer declares it at the handoff point: `AdoptRecord(record)` means the writer releases it from now on; `BorrowRecord(record)` means only the pointer is borrowed and the producer still releases it. `Insert` and `BatchInsert` both use the latter: the table holds the records handed in by the caller and the writer only borrows them, so batches and single inserts share exactly the same ownership semantics — and a batch no longer needs a private copy of every record. The price is that a borrowed record must not be modified or released while the writer may still be reading it: `Update` rewrites its bytes, and `Erase` / `TruncateTable` returns it to the object pool. Stop and join the writer before changing the table ahead of a pending write.
 
 ## 7. Integration Tests
 

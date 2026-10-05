@@ -393,13 +393,24 @@ Debug 版 `ObjectPool` 带 `OwnedItemRegistry`（`ObjectPool.h:136-205`），可
 进 `RecordOwnership` 套件（各用一个 RAII harness 持有 `AsyncDbWriter`）。用例 3、7、8 各自对应
 一条曾经的泄漏或悬挂路径，任一条回退都会让 `UnitTests` 退出码非 0。
 
-## 9. 本次未改、留待裁定的相邻问题
+## 9. 本次未改、留待裁定的相邻问题（2026-10-05 已裁决，见 §11）
 
-`Table::BatchInsert` 的**未订阅分支**（`mdbSubscriber_ == nullptr || !DbInited`）里，调用方原始记录
-只被 `delete records` 释放了容器、元素本身仍无人归还。这与本次修掉的是同一族缺陷，但方案 §4.4 明确
-把未订阅分支列为"不变"，故未动。若要一并修，做法是把 `AdoptRecord` 的包装提到 `if` 之前，两条路
-都交给句柄析构，代价是该分支下调用方原始记录也会被释放（现有三处调用点 `ThostFtdcTraderSpiImpl.cpp`
-交出后均不再使用，已核对）。**待用户裁定。**
+**问题（原文保留）**：`Table::BatchInsert` 的**未订阅分支**（`mdbSubscriber_ == nullptr || !DbInited`）
+里，调用方原始记录只被 `delete records` 释放了容器、元素本身仍无人归还。这与本次修掉的是同一族缺陷，
+但方案 §4.4 明确把未订阅分支列为"不变"，故未动。
+
+**当初列为"不变"的理由**：批插当时的归属口径是 `AdoptRecord`——记录交给写侧、由写侧归还。未订阅时
+写侧不存在，那批记录便既不在内存表、也无第三方持有。改口径会牵动调用方契约，而本批的既定范围是
+"只修被记录归属重构暴露出来的泄漏"，不宜顺手改契约，故只登记不动。
+
+**当初备选（未采用）**：把 `AdoptRecord` 的包装提到 `if` 之前，两条路都交给句柄析构，代价是该分支下
+调用方原始记录也会被释放（现有三处调用点 `ThostFtdcTraderSpiImpl.cpp` 交出后均不再使用，已核对）。
+**未采用的理由**：它只堵泄漏，不解决 `Insert`（借用）与 `BatchInsert`（移交）两处口径分裂，而分裂
+本身是这些泄漏的温床。
+
+**裁决与落地（2026-10-05，用户指令「去做吧」）**：改为把批插的口径与 `Insert` 统一——内存表直接持有
+调用方交来的记录，写侧改用 `BorrowRecord` 只借不还。泄漏随之自然消失：未订阅时记录就在内存表里，
+由 `TruncateTable(s)` 或 `InitDb()` 接管，"只给写侧的载荷"这个角色不存在了。详见 §11。
 
 ### 9.1 批后审查提出的四条（2026-10-05 发布前 API 冻结批分两批处置）
 
@@ -439,3 +450,61 @@ Release 前按 Harness §3 逐条裁定公开 API 面，用户指令「1234 都�
 把新头与新 DLL 落到 `../Libs/DbAdapters/x64-windows`（非 Up-to-date）；随后 Mdb `TestMdb` 重建 + 实跑
 退出码 0（27 行，`grep "ownership\|Assertion\|ObjectPool"` 零命中）、QuantTrading `SimExchangeInit`
 重建退出码 0（未运行，需 CTP 环境）。
+
+## 11. 批插入归属口径与 `Insert` 统一（2026-10-05）
+
+§9 的裁决落地。改的是模板 `Templates/Cpp/Mdb/MdbTables.cpp.tpl` 的 `BatchInsert`，再按各仓
+`pumplist.xml` 逐目标重跑 `pump.py` 生成 Mdb（11 表）与 QuantTrading（21 表）的 `MdbTables.cpp`。
+
+### 11.1 改了什么
+
+| | 改前 | 改后 |
+| :--- | :--- | :--- |
+| 进内存表的 | `Allocate()` + `memcpy` 造出的**副本** | 调用方交来的记录**本身** |
+| 交给写侧的 | 调用方原始记录，`AdoptRecord`（写侧归还） | 表中那批记录，`BorrowRecord`（写侧只借） |
+| 未订阅时 | 原件无人归还（**§9 的泄漏**） | 记录在表里，由表接管，**无泄漏** |
+| 与 `Insert` 的口径 | 两样 | 一致 |
+
+改后每条记录省下一次 `Allocate()` + `memcpy(sizeof(T))`。**但这只是副产品**：真正的收益是 §9 的泄漏
+自然消失、`Insert` 与 `BatchInsert` 的归属语义不再分裂。
+
+### 11.2 新增的调用方义务（必须写下来）
+
+`BorrowRecord` 的固有前提此前只隐含在 `Insert` 上，现在批插也适用，故写进 README 契约：
+**借用期间调用方不得改写或释放该记录**——`Update` 会 `memcpy` 覆写它的字节、`Erase` 与
+`TruncateTable` 会把它归还给对象池，而写线程此刻可能正在读它（`AsyncDbWriter` 是异步消费）。
+凡是这批记录写出去之前就要改表，先 `Stop()` / `Join()` 写线程。
+
+判断依据是写侧的消费时机：`OnRecordBatchInsert` 只是入队，真正的 `db_->BatchInsert` 发生在写线程
+上（`AsyncDbWriter.cpp:311-325`），这段窗口里主线程动那条记录就是数据竞争。
+
+**为何接受这个代价**：`Insert` 早已在担同一风险（`AdoptRecord` 会让内存表里的活记录变成悬空指针，
+故 `Insert` 必须借用）。批插改前靠"给写侧一份副本"回避了它，代价是每条记录一次多余分配、且未订阅时
+泄漏。两处口径统一后，风险同为一条、可一句话说清；分裂则要每次分情况推理。
+
+### 11.3 本批未动
+
+`BatchInsert` **不调 `CheckInsert`**，与 `Insert`（查重、失败即 `Deallocate()` 并返回 false）不对称。
+这是**行为变更**（现在同主键会一并进表），超出本批范围，仍为悬项。
+
+### 11.4 验证
+
+模板改后重跑 `pump.py`（Mdb、QuantTrading 各一次，均退出码 0），生成的 diff 与预期逐字相符：
+每张表的 `BatchInsert` 只少两行（`Allocate` + `memcpy`）、`newRecord` 全部换成 `record`、
+`AdoptRecord(r)` 换成 `BorrowRecord(r)`，无其它改动。
+
+新增回归用例 `TestMdb.cpp` 的 `TestBatchInsertTakesOwnership()`（未订阅分支）：
+输入 `Exchange::Allocate()` 造 3 条记录交给 `BatchInsert`，期望 `SelectAll()` 数到 3 行**且**其中一条
+是**调用方交出的那个指针**（`storedRowCount=3 storedHandedInRecord=1`），随后 `TruncateTable()`
+把它们归还池。**改前该断言必为 0**——改前表里存的是 `Allocate()` 造的新槽位，不可能等于调用方已持有的
+记录。`main()` 据此返回退出码。
+
+`UnitTests`（9/26）与 `TestDB` 不涉及本路径，未重跑；Mdb `TestMdb` 实跑退出码 0、输出 28 行、
+`grep "ownership violation\|Assertion\|ObjectPool"` 零命中；QuantTrading `SimExchangeInit` 重建退出码 0。
+
+### 11.5 顺带发现（未改）
+
+`ThostFtdcTraderSpiImpl.cpp:62/113/169` 把成员 `exchanges_` / `products_` / `instruments_` 交给
+`BatchInsert`，而 `BatchInsert` 结尾 `delete records;` 连容器一并销毁，调用方却未把它们重新指向新容器。
+**这是本批之前就有的缺陷**（`delete records` 在改前的模板里已有），与本次归属口径无关；断线重连会
+再次触发 `ReqQryExchange()` 并对悬空指针 `push_back`。登记待议，本批不动。
