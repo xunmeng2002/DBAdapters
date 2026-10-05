@@ -3,6 +3,7 @@
 #include <Spark/Core/Logger/Logger.h>
 #include <cstring>
 #include <memory>
+#include <utility>
 #include <vector>
 
 using namespace std;
@@ -15,14 +16,6 @@ void ReleaseDbOperate(DbAdapters::DbOperate* dbOperate) noexcept
 	if (dbOperate == nullptr)
 	{
 		return;
-	}
-	try
-	{
-		dbOperate->DeallocateRecord();
-	}
-	catch (...)
-	{
-		WriteLog(LogLevel::Error, "AsyncDbWriter: DeallocateRecord failed. TableId:0x%X", dbOperate->TableId);
 	}
 	dbOperate->Deallocate();
 }
@@ -122,70 +115,39 @@ void AsyncDbWriter::DropPendingOperates()
 
 void AsyncDbWriter::OnTableOp(DbOperateType op)
 {
-	DbOperate* dbOperate = AllocateDbOperate();
-	dbOperate->Operate = op;
-	dbOperate->TableId = 0;
-	dbOperate->Record = nullptr;
+	EnqueueDbOperate(op, 0);
+}
+
+void AsyncDbWriter::OnRecordInsert(unsigned int tableID, RecordHandle record)
+{
+	EnqueueDbOperate(DbOperateType::Insert, tableID, move(record));
+}
+
+void AsyncDbWriter::OnRecordBatchInsert(unsigned int tableID, std::vector<RecordHandle> records)
+{
+	DbOperate* dbOperate = CreateDbOperate(DbOperateType::BatchInsert, tableID);
+	static_cast<DbOperateImpl*>(dbOperate)->SetBatchRecords(move(records));
 	AddDbOperate(dbOperate);
 }
 
-void AsyncDbWriter::OnRecordInsert(unsigned int tableID, void* record)
+void AsyncDbWriter::OnRecordErase(unsigned int tableID, RecordHandle record)
 {
-	DbOperate* dbOperate = AllocateDbOperate();
-	dbOperate->Operate = DbOperateType::Insert;
-	dbOperate->TableId = tableID;
-	dbOperate->Record = record;
-	AddDbOperate(dbOperate);
+	EnqueueDbOperate(DbOperateType::Delete, tableID, move(record));
 }
 
-void AsyncDbWriter::OnRecordBatchInsert(unsigned int tableID, std::vector<const void*>* records)
+void AsyncDbWriter::OnRecordEraseByIndex(unsigned int tableID, unsigned int indexId, RecordHandle record)
 {
-	DbOperate* dbOperate = AllocateDbOperate();
-	dbOperate->Operate = DbOperateType::BatchInsert;
-	dbOperate->TableId = tableID;
-	dbOperate->Record = nullptr;
-
-	auto& batch = static_cast<DbOperateImpl*>(dbOperate)->GetBatchData();
-	batch.swap(*records);
-	delete records;
-	AddDbOperate(dbOperate);
+	EnqueueDbOperate(DbOperateType::DeleteByIndex, tableID, move(record), indexId);
 }
 
-void AsyncDbWriter::OnRecordErase(unsigned int tableID, void* record)
+void AsyncDbWriter::OnRecordUpdate(unsigned int tableID, RecordHandle record)
 {
-	DbOperate* dbOperate = AllocateDbOperate();
-	dbOperate->Operate = DbOperateType::Delete;
-	dbOperate->TableId = tableID;
-	dbOperate->Record = record;
-	AddDbOperate(dbOperate);
-}
-
-void AsyncDbWriter::OnRecordEraseByIndex(unsigned int tableID, unsigned int indexId, void* record)
-{
-	DbOperate* dbOperate = AllocateDbOperate();
-	dbOperate->Operate = DbOperateType::DeleteByIndex;
-	dbOperate->TableId = tableID;
-	dbOperate->IndexId = indexId;
-	dbOperate->Record = record;
-	AddDbOperate(dbOperate);
-}
-
-void AsyncDbWriter::OnRecordUpdate(unsigned int tableID, void* record)
-{
-	DbOperate* dbOperate = AllocateDbOperate();
-	dbOperate->Operate = DbOperateType::Update;
-	dbOperate->TableId = tableID;
-	dbOperate->Record = record;
-	AddDbOperate(dbOperate);
+	EnqueueDbOperate(DbOperateType::Update, tableID, move(record));
 }
 
 void AsyncDbWriter::OnRecordTruncate(unsigned int tableID)
 {
-	DbOperate* dbOperate = AllocateDbOperate();
-	dbOperate->Operate = DbOperateType::Truncate;
-	dbOperate->TableId = tableID;
-	dbOperate->Record = nullptr;
-	AddDbOperate(dbOperate);
+	EnqueueDbOperate(DbOperateType::Truncate, tableID);
 }
 
 
@@ -311,13 +273,20 @@ void AsyncDbWriter::AddDbOperate(DbOperate* dbOperate)
 	conditionVariable_.notify_one();
 }
 
-DbOperate* AsyncDbWriter::AllocateDbOperate()
+DbOperate* AsyncDbWriter::CreateDbOperate(DbOperateType operate, unsigned int tableId, RecordHandle record, unsigned int indexId)
 {
-	DbOperate* op = DbOperate::Allocate();
-	static_cast<DbOperateImpl*>(op)->SetSchemaRegistry(schemaRegistry_);
-	return op;
+	DbOperate* dbOperate = DbOperate::Allocate();
+	dbOperate->Operate = operate;
+	dbOperate->TableId = tableId;
+	dbOperate->IndexId = indexId;
+	dbOperate->Record = move(record);
+	return dbOperate;
 }
 
+void AsyncDbWriter::EnqueueDbOperate(DbOperateType operate, unsigned int tableId, RecordHandle record, unsigned int indexId)
+{
+	AddDbOperate(CreateDbOperate(operate, tableId, move(record), indexId));
+}
 
 void AsyncDbWriter::CreateTables(DbOperate* dbOperate)
 {
@@ -336,7 +305,7 @@ void AsyncDbWriter::InsertRecord(DbOperate* dbOperate)
 	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableId);
 	if (schema)
 	{
-		db_->Insert(schema, dbOperate->Record);
+		db_->Insert(schema, dbOperate->Record.Get());
 	}
 }
 void AsyncDbWriter::BatchInsertRecords(DbOperate* dbOperate)
@@ -344,18 +313,23 @@ void AsyncDbWriter::BatchInsertRecords(DbOperate* dbOperate)
 	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableId);
 	if (!schema) return;
 
-	auto& batch = static_cast<DbOperateImpl*>(dbOperate)->GetBatchData();
-	if (!batch.empty())
+	const std::vector<RecordHandle>& batchRecords = static_cast<DbOperateImpl*>(dbOperate)->GetBatchRecords();
+	if (batchRecords.empty()) return;
+
+	std::vector<const void*> recordPointers;
+	recordPointers.reserve(batchRecords.size());
+	for (const RecordHandle& record : batchRecords)
 	{
-		db_->BatchInsert(schema, batch.data(), static_cast<int>(batch.size()));
+		recordPointers.push_back(record.Get());
 	}
+	db_->BatchInsert(schema, recordPointers.data(), static_cast<int>(recordPointers.size()));
 }
 void AsyncDbWriter::DeleteRecord(DbOperate* dbOperate)
 {
 	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableId);
 	if (schema)
 	{
-		db_->Delete(schema, dbOperate->Record, schema->primaryKeyIndices, schema->primaryKeyCount);
+		db_->Delete(schema, dbOperate->Record.Get(), schema->primaryKeyIndices, schema->primaryKeyCount);
 	}
 }
 
@@ -368,7 +342,7 @@ void AsyncDbWriter::DeleteRecordByIndex(DbOperate* dbOperate)
 	{
 		if (schema->secondaryIndices[i].indexId == dbOperate->IndexId)
 		{
-			db_->Delete(schema, dbOperate->Record,
+			db_->Delete(schema, dbOperate->Record.Get(),
 			             schema->secondaryIndices[i].fieldIndices,
 			             schema->secondaryIndices[i].fieldCount);
 			return;
@@ -381,7 +355,7 @@ void AsyncDbWriter::UpdateRecord(DbOperate* dbOperate)
 	const TableSchema* schema = schemaRegistry_->GetSchema(dbOperate->TableId);
 	if (schema)
 	{
-		db_->Update(schema, dbOperate->Record);
+		db_->Update(schema, dbOperate->Record.Get());
 	}
 }
 void AsyncDbWriter::TruncateTable(DbOperate* dbOperate)

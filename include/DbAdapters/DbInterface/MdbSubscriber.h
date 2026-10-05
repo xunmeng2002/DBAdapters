@@ -1,5 +1,6 @@
 #pragma once
 #include <DbAdapters/DbInterface/DbOperate.h>
+#include <DbAdapters/DbInterface/RecordHandle.h>
 #include <atomic>
 #include <vector>
 
@@ -16,11 +17,11 @@ public:
 	virtual ~MdbSubscriber() = default;
 
 	virtual void OnTableOp(DbOperateType op) {}
-	virtual void OnRecordInsert(unsigned int tableID, void* record) {}
-	virtual void OnRecordBatchInsert(unsigned int tableID, std::vector<const void*>* records) {}
-	virtual void OnRecordErase(unsigned int tableID, void* record) {}
-	virtual void OnRecordEraseByIndex(unsigned int tableID, unsigned int indexId, void* record) {}
-	virtual void OnRecordUpdate(unsigned int tableID, void* record) {}
+	virtual void OnRecordInsert(unsigned int tableID, RecordHandle record) {}
+	virtual void OnRecordBatchInsert(unsigned int tableID, std::vector<RecordHandle> records) {}
+	virtual void OnRecordErase(unsigned int tableID, RecordHandle record) {}
+	virtual void OnRecordEraseByIndex(unsigned int tableID, unsigned int indexId, RecordHandle record) {}
+	virtual void OnRecordUpdate(unsigned int tableID, RecordHandle record) {}
 	virtual void OnRecordTruncate(unsigned int tableID) {}
 
 public:

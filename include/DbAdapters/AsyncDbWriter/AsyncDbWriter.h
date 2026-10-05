@@ -4,6 +4,7 @@
 #include <DbAdapters/DbInterface/DbSubscriber.h>
 #include <DbAdapters/DbInterface/Db.h>
 #include <DbAdapters/DbInterface/FailureLogThrottle.h>
+#include <DbAdapters/DbInterface/RecordHandle.h>
 #include <DbAdapters/DbInterface/SchemaRegistry.h>
 #include <Spark/TemplateLib/TemplateLib.h>
 #include <Spark/Core/Core.h>
@@ -11,6 +12,7 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <vector>
 
 namespace DbAdapters
 {
@@ -25,11 +27,11 @@ public:
 	void DisConnect();
 
 	virtual void OnTableOp(DbOperateType op) override;
-	virtual void OnRecordInsert(unsigned int tableID, void* record) override;
-	virtual void OnRecordBatchInsert(unsigned int tableID, std::vector<const void*>* records) override;
-	virtual void OnRecordErase(unsigned int tableID, void* record) override;
-	virtual void OnRecordEraseByIndex(unsigned int tableID, unsigned int indexId, void* record) override;
-	virtual void OnRecordUpdate(unsigned int tableID, void* record) override;
+	virtual void OnRecordInsert(unsigned int tableID, RecordHandle record) override;
+	virtual void OnRecordBatchInsert(unsigned int tableID, std::vector<RecordHandle> records) override;
+	virtual void OnRecordErase(unsigned int tableID, RecordHandle record) override;
+	virtual void OnRecordEraseByIndex(unsigned int tableID, unsigned int indexId, RecordHandle record) override;
+	virtual void OnRecordUpdate(unsigned int tableID, RecordHandle record) override;
 	virtual void OnRecordTruncate(unsigned int tableID) override;
 
 
@@ -42,8 +44,9 @@ protected:
 	DbOperate* GetDbOperate();
 
 private:
-	DbOperate* AllocateDbOperate();
 	void AddDbOperate(DbOperate* dbOperate);
+	DbOperate* CreateDbOperate(DbOperateType operate, unsigned int tableId, RecordHandle record = RecordHandle(), unsigned int indexId = 0);
+	void EnqueueDbOperate(DbOperateType operate, unsigned int tableId, RecordHandle record = RecordHandle(), unsigned int indexId = 0);
 	int PendingOperateCount();
 	void DropPendingOperates();
 

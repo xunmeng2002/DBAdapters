@@ -52,7 +52,6 @@ struct TableSchema
     int                     fieldCount;
     const int*              primaryKeyIndices;
     int                     primaryKeyCount;
-    void                    (*DeallocateRecord)(void*);
     const IndexDefinition*  secondaryIndices;
     int                     secondaryIndexCount;
 };

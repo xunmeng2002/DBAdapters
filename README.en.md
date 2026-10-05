@@ -22,7 +22,7 @@ It does not depend on any concrete database and only defines the description and
 | Component | Description |
 | --- | --- |
 | `DB` | Abstract base class: connection management + create / drop / truncate tables + single / batch CRUD + full / custom-SQL queries |
-| `TableSchema` | Table schema description (table name, field descriptors, primary key, secondary indexes, record deallocation callback) that drives automatic SQL generation |
+| `TableSchema` | Table schema description (table name, field descriptors, primary key, secondary indexes) that drives automatic SQL generation |
 | `FieldDescriptor` | Field description: name, type (Int / Int64 / Double / Char / Bool), offset within the record struct, and array size |
 | `RecordFactory` | Record allocation and collection callbacks for query results (`Allocate` / `PushBack`) |
 | `IndexDefinition` | Secondary index definition (index ID + field set), used for delete-by-index |
@@ -105,6 +105,8 @@ DbAdapters/
 │   └── MariadbWrapper/           # MariaDB adapter implementation
 ├── test/                         # Test programs
 │   ├── TestDB/                   # All-in-one integration tests for four DBs + DuckDB vectorized-read tests
+│   ├── UnitTests/                # doctest unit tests (no backend, no DLL)
+│   ├── Common/                   # Test support shared by both test targets
 │   └── CMakeLists.txt
 ├── docs/                         # Documentation
 │   ├── backend-runtime-loading.md # Runtime backend loading (design notes, Chinese)
@@ -240,7 +242,6 @@ struct Account
     int  AccountType;
 
     static Account* Allocate() { return new Account(); }
-    static void Deallocate(void* record) { delete static_cast<Account*>(record); }
 
     static const FieldDescriptor Fields[3];
     static const int PrimaryKey[1];
@@ -256,7 +257,7 @@ const int Account::PrimaryKey[1] = {0};
 const TableSchema& Account::GetSchema()
 {
     static const TableSchema schema = {
-        "t_account", Account::Fields, 3, Account::PrimaryKey, 1, Account::Deallocate, nullptr, 0,
+        "t_account", Account::Fields, 3, Account::PrimaryKey, 1, nullptr, 0,
     };
     return schema;
 }
@@ -334,11 +335,10 @@ static const FieldDescriptor TickRowFields[] = {
     {"BarPeriod",     FieldType::Int32,  offsetof(TickRow, BarPeriod),     0},
     {"IsValid",       FieldType::Bool,   offsetof(TickRow, IsValid),       0},
 };
-static void DeallocateTickRow(void* record) { static_cast<TickRow*>(record)->Deallocate(); }
 const TableSchema& TickRow::GetSchema()
 {
     static const TableSchema schema = {
-        "t_test_tick", TickRowFields, 7, nullptr, 0, DeallocateTickRow, nullptr, 0,
+        "t_test_tick", TickRowFields, 7, nullptr, 0, nullptr, 0,
     };
     return schema;
 }
@@ -398,8 +398,9 @@ int main()
 
 ```cpp
 #include <DbAdapters/AsyncDbWriter/AsyncDbWriter.h>
-#include <DbAdapters/SqliteWrapper/SqliteWrapper.h>
+#include <DbAdapters/DbInterface/RecordHandle.h>
 #include <DbAdapters/DbInterface/SchemaRegistry.h>
+#include <DbAdapters/SqliteWrapper/SqliteWrapper.h>
 #include <Spark/Core/Core.h>
 
 using namespace DbAdapters;
@@ -449,7 +450,7 @@ int main()
     Account record;
     std::memset(&record, 0, sizeof(record));
     std::strcpy(record.AccountId, "A002");
-    writer.OnRecordInsert(Account::TableId, &record);   // Enqueued → persisted by the background thread
+    writer.OnRecordInsert(Account::TableId, BorrowRecord(&record));  // Borrowed: `record` is a live stack object, still released here
 
     writer.Stop();
     writer.Join();
@@ -457,7 +458,7 @@ int main()
 }
 ```
 
-> **Record-ownership contract**: for `Insert / BatchInsert`, the record is owned by the caller (the in-memory database) and must stay valid until the operation is consumed; for `Delete / DeleteByIndex / Update`, the record is released by `AsyncDbWriter` via the schema's `DeallocateRecord`, so those records should be dynamically allocated.
+> **Record-ownership contract**: how a record is released travels with its record handle (`RecordHandle`) instead of being inferred from the operation type. The producer declares it at the handoff point: `AdoptRecord(record)` means the writer releases it from now on; `BorrowRecord(record)` means only the pointer is borrowed and the producer still releases it (use the latter when the in-memory table keeps holding the same record, otherwise the writer's release leaves the table with a dangling pointer). Every record in a batch insert carries its own handle and is released individually, so batches and single inserts share exactly the same ownership semantics.
 
 ## 7. Integration Tests
 
@@ -471,6 +472,8 @@ The project ships the **test/TestDB** integration test program covering all four
 | `TestMariadb` | Full MariaDB CRUD flow (requires a local MariaDB; commented out by default) |
 | `TestDuckdbVectorized` | Vectorized reads: type conversion, NULL sentinels, error propagation |
 | `TestDuckdbVectorizedMultiChunk` | Multi-chunk fallback path: BIGINT→Char, DOUBLE→Int64 row-index correctness across chunks |
+| `TestBackendLoader` | Runtime loading: the normal per-kind entry returns a usable object for a backend that loads; a backend that fails to construct returns a readable reason instead of letting the exception cross the C boundary; a low-level per-basename entry covers "module does not exist at all", and the message must name both candidate paths. Failures are reflected in the process exit code |
+| `TestAsyncWriterRecordOwnership` | End-to-end smoke for record ownership: against a real sqlite backend with a real writer thread, a record handed over via `AdoptRecord` must actually land in the table and be released exactly once. The semantic details (borrow, move, batch, exceptions, disconnect) live in the unit tests below. Failures are reflected in the process exit code |
 
 ### Run the Tests
 
@@ -482,13 +485,44 @@ The project ships the **test/TestDB** integration test program covering all four
 ./bin/Release/TestDB
 ```
 
-## 8. License & Disclaimer
+## 8. Unit Tests
+
+`test/UnitTests` uses [doctest](https://github.com/doctest/doctest) for backend-independent
+semantic cases. It links only `doctest::doctest`, `Spark::Core`, and `AsyncDbWriter` — it
+**needs none of the four wrappers and no duckdb.dll**, so the fast and slow tiers of `TestDB`
+can be run separately.
+
+| Suite | Cases |
+| :--- | :--- |
+| `RecordHandle` | Move leaves the source empty; move assignment releases the old record first; vector growth does not double-release |
+| `RecordOwnership` | A borrowed record is not released; an adopted one is released exactly once; every batch element is released; a throwing execution still releases exactly once; discarding pending operations on disconnect releases exactly once |
+
+```bash
+# Windows
+./bin/Release/UnitTests.exe
+
+# Linux
+./bin/Release/UnitTests
+
+# Filter by suite / case (built into doctest)
+./bin/Release/UnitTests.exe --test-suite=RecordOwnership
+./bin/Release/UnitTests.exe --list-test-cases
+```
+
+> **Note**: the doctest single header is not committed, so a new environment must first place it
+> under `../Libs/doctest` as described in
+> [Environment Setup 1.7](docs/environment-setup.en.md#17-doctest-unit-test-framework).
+> A throwing release callback in `RecordHandle` reaches `std::terminate` directly (the destructor
+> is `noexcept`); doctest has no death tests, so that contract is a known test blind spot covered
+> by the header's comments.
+
+## 9. License & Disclaimer
 
 - **License**: BSD-4-Clause — see the [LICENSE](LICENSE) file
 - **Scope**: This project is for personal learning and research only
 - **Risk**: This is a personal open-source project — thoroughly test and assess risk before use in production
 
-## 9. Additional Notes
+## 10. Additional Notes
 
 - **Include style**: headers use the `#include <DbAdapters/Module/HeaderName.h>` convention
 - **Namespace**: all interfaces live in the `DbAdapters` namespace

@@ -1,6 +1,6 @@
 #pragma once
-#include <DbAdapters/DbInterface/SchemaRegistry.h>
 #include <DbAdapters/DbInterface/DbOperate.h>
+#include <utility>
 #include <vector>
 
 
@@ -9,15 +9,12 @@ namespace DbAdapters
 class DbOperateImpl : public DbOperate
 {
 public:
-    void SetSchemaRegistry(SchemaRegistry* registry) { schema_registry_ = registry; }
-
     virtual void Deallocate() override;
-    virtual void DeallocateRecord() override;
 
-    std::vector<const void*>& GetBatchData() { return batch_data_; }
+    const std::vector<RecordHandle>& GetBatchRecords() const { return batchRecords_; }
+    void SetBatchRecords(std::vector<RecordHandle> records) { batchRecords_ = std::move(records); }
 
 private:
-    std::vector<const void*> batch_data_;
-    SchemaRegistry* schema_registry_ = nullptr;
+    std::vector<RecordHandle> batchRecords_;
 };
 }

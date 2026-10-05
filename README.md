@@ -22,7 +22,7 @@ Created by [Fireseeker](https://fireseeker.cn/)
 | 组件 | 说明 |
 | --- | --- |
 | `DB` | 抽象基类：连接管理 + 建表 / 删表 / 清表 + 单条 / 批量增删改 + 全量 / 自定义 SQL 查询 |
-| `TableSchema` | 表结构描述（表名、字段描述、主键、二级索引、记录释放回调），驱动 SQL 自动生成 |
+| `TableSchema` | 表结构描述（表名、字段描述、主键、二级索引），驱动 SQL 自动生成 |
 | `FieldDescriptor` | 字段描述：名称、类型（Int / Int64 / Double / Char / Bool）、在记录结构体中的偏移与数组长度 |
 | `RecordFactory` | 查询结果的记录分配与收集回调（`Allocate` / `PushBack`） |
 | `IndexDefinition` | 二级索引定义（索引 ID + 字段集合），供按索引删除使用 |
@@ -110,6 +110,8 @@ DbAdapters/
 │   └── MariadbWrapper/           # MariaDB 适配器实现
 ├── test/                         # 测试程序
 │   ├── TestDB/                   # 四库一体化集成测试 + DuckDB 向量化读取测试
+│   ├── UnitTests/                # 单元测试（doctest）：记录归属语义，无后端、无 DLL
+│   ├── Common/                   # 两个测试目标共用的测试支撑（含真后端用例也要用的探针记录）
 │   └── CMakeLists.txt
 ├── docs/                         # 文档
 │   ├── backend-runtime-loading.md # 后端运行时按配置装载（设计说明）
@@ -245,7 +247,6 @@ struct Account
     int  AccountType;
 
     static Account* Allocate() { return new Account(); }
-    static void Deallocate(void* record) { delete static_cast<Account*>(record); }
 
     static const FieldDescriptor Fields[3];
     static const int PrimaryKey[1];
@@ -261,7 +262,7 @@ const int Account::PrimaryKey[1] = {0};
 const TableSchema& Account::GetSchema()
 {
     static const TableSchema schema = {
-        "t_account", Account::Fields, 3, Account::PrimaryKey, 1, Account::Deallocate, nullptr, 0,
+        "t_account", Account::Fields, 3, Account::PrimaryKey, 1, nullptr, 0,
     };
     return schema;
 }
@@ -339,11 +340,10 @@ static const FieldDescriptor TickRowFields[] = {
     {"BarPeriod",     FieldType::Int32,  offsetof(TickRow, BarPeriod),     0},
     {"IsValid",       FieldType::Bool,   offsetof(TickRow, IsValid),       0},
 };
-static void DeallocateTickRow(void* record) { static_cast<TickRow*>(record)->Deallocate(); }
 const TableSchema& TickRow::GetSchema()
 {
     static const TableSchema schema = {
-        "t_test_tick", TickRowFields, 7, nullptr, 0, DeallocateTickRow, nullptr, 0,
+        "t_test_tick", TickRowFields, 7, nullptr, 0, nullptr, 0,
     };
     return schema;
 }
@@ -403,8 +403,9 @@ int main()
 
 ```cpp
 #include <DbAdapters/AsyncDbWriter/AsyncDbWriter.h>
-#include <DbAdapters/SqliteWrapper/SqliteWrapper.h>
+#include <DbAdapters/DbInterface/RecordHandle.h>
 #include <DbAdapters/DbInterface/SchemaRegistry.h>
+#include <DbAdapters/SqliteWrapper/SqliteWrapper.h>
 #include <Spark/Core/Core.h>
 
 using namespace DbAdapters;
@@ -454,7 +455,7 @@ int main()
     Account record;
     std::memset(&record, 0, sizeof(record));
     std::strcpy(record.AccountId, "A002");
-    writer.OnRecordInsert(Account::TableId, &record);   // 入队 → 后台线程异步落库
+    writer.OnRecordInsert(Account::TableId, BorrowRecord(&record));  // 借用：record 是栈上活对象，归还仍归本函数
 
     writer.Stop();
     writer.Join();
@@ -462,7 +463,7 @@ int main()
 }
 ```
 
-> **记录所有权约定**：`Insert / BatchInsert` 的记录由调用方（内存库）管理生命周期，且在操作被消费前需保持有效；`Delete / DeleteByIndex / Update` 的记录由 `AsyncDbWriter` 通过 schema 的 `DeallocateRecord` 释放，因此删除 / 更新用的记录应动态分配。
+> **记录所有权约定**：归还方式随记录句柄（`RecordHandle`）一起移交，不再按操作类型推断。生产方在移交点声明：`AdoptRecord(record)` 表示此后由写侧归还；`BorrowRecord(record)` 表示只借用指针、归还仍归自己（内存表同时持有同一条记录时用后者，否则写侧释放会让内存表里的活记录变成悬空指针）。批插入的每条记录各持一个句柄，逐个归还，故批与单次的归属语义完全一致。
 
 ## 七、集成测试
 
@@ -477,6 +478,7 @@ int main()
 | `TestDuckdbVectorized` | 向量化读取：类型转换、NULL 哨兵、错误透出 |
 | `TestDuckdbVectorizedMultiChunk` | 多 chunk 回退路径：BIGINT→Char、DOUBLE→Int64 跨 chunk 行索引正确性 |
 | `TestBackendLoader` | 运行时装载：按种类的常路入口装载成功的后端返回可用对象；构造失败的后端返回可读原因而非让异常穿过 C 边界；另有一条按基名的低层入口覆盖"模块根本不存在"，文案须含两条候选路径。失败会反映到进程退出码 |
+| `TestAsyncWriterRecordOwnership` | 记录归属的端到端烟雾：真 sqlite + 真写线程，`AdoptRecord` 移交一条记录后断言行确实落库、且归还恰好一次。语义细节（借用、移动、批、异常、断开）见下节单元测试。失败会反映到进程退出码 |
 
 ### 运行测试
 
@@ -488,13 +490,41 @@ int main()
 ./bin/Release/TestDB
 ```
 
-## 八、许可证 & 声明
+## 八、单元测试
+
+`test/UnitTests` 用 [doctest](https://github.com/doctest/doctest) 承载与后端无关的语义用例，
+只链接 `doctest::doctest`、`Spark::Core` 与 `AsyncDbWriter`，**不需要四个 Wrapper、不需要 duckdb.dll**
+—— 与 `TestDB` 的快慢两档因此可以分开跑。
+
+| 测试套件 | 用例 |
+| :--- | :--- |
+| `RecordHandle` | 移动后源不再归还；移动赋值先归还旧记录；容器扩容不重复归还 |
+| `RecordOwnership` | 借用不归还；移交恰好归还一次；批元素逐个恰好归还一次；执行抛异常仍恰好归还一次；断开丢弃待办时恰好归还一次 |
+
+```bash
+# Windows
+./bin/Release/UnitTests.exe
+
+# Linux
+./bin/Release/UnitTests
+
+# 按套件 / 用例筛选（doctest 内置）
+./bin/Release/UnitTests.exe --test-suite=RecordOwnership
+./bin/Release/UnitTests.exe --list-test-cases
+```
+
+> **注意**：doctest 单头不入版本库，新环境须先按
+> [环境准备指南 1.7](docs/environment-setup.md#17-doctest单元测试框架) 把它放到 `../Libs/doctest`。
+> `RecordHandle` 的归还回调若抛异常会直接 `std::terminate`（析构为 `noexcept`），
+> doctest 无死亡测试，这条契约属已知测试盲区，由头文件注释说明。
+
+## 九、许可证 & 声明
 
 - **开源协议**：BSD-4-Clause，详见 [LICENSE](LICENSE) 文件
 - **适用范围**：本项目仅供个人学习、研究使用
 - **风险提示**：本库为个人开源项目，生产环境使用请自行充分测试并评估风险
 
-## 九、补充说明
+## 十、补充说明
 
 - **包含路径**：头文件统一使用 `#include <DbAdapters/Module/HeaderName.h>` 风格
 - **命名空间**：全部接口位于 `DbAdapters` 命名空间

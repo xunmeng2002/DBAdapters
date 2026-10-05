@@ -1,23 +1,30 @@
 #include "MdbStructs.h"
+#include "RecordOwnershipTestSupport.h"
 #include <DbAdapters/SqliteWrapper/SqliteWrapper.h>
 #include <DbAdapters/DuckdbWrapper/DuckdbWrapper.h>
 #include <DbAdapters/MysqlWrapper/MysqlWrapper.h>
 #include <DbAdapters/MariadbWrapper/MariadbWrapper.h>
 #include <DbAdapters/BackendLoader/DbBackendLoader.h>
 #include <DbAdapters/DbInterface/TypedTable.h>
+#include <DbAdapters/DbInterface/RecordHandle.h>
 #include <DbAdapters/DbInterface/SchemaRegistry.h>
 #include <DbAdapters/AsyncDbWriter/AsyncDbWriter.h>
 #include <Spark/Core/Core.h>
+#include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <iostream>
 #include <limits>
+#include <utility>
+#include <vector>
 
 
 using namespace std;
 using namespace Mdb;
 using namespace Spark::Core;
 using namespace DbAdapters;
+using namespace DbAdapters::RecordOwnershipTest;
 
 const char* sqliteDbName = "./Test.sqlitedb";
 const char* duckdbDbName = "./Test.duckdb";
@@ -230,14 +237,10 @@ namespace Mdb
         {"BarPeriod",     FieldType::Int32,  offsetof(TestTickRow, BarPeriod),     0},
         {"IsValid",       FieldType::Bool,   offsetof(TestTickRow, IsValid),       0},
     };
-    static void DeallocateTestTickRow(void* record)
-    {
-        static_cast<TestTickRow*>(record)->Deallocate();
-    }
     const TableSchema& TestTickRow::GetSchema()
     {
         static const TableSchema schema = {
-            "t_test_tick", TestTickRowFields, 7, nullptr, 0, DeallocateTestTickRow, nullptr, 0,
+            "t_test_tick", TestTickRowFields, 7, nullptr, 0, nullptr, 0,
         };
         return schema;
     }
@@ -353,15 +356,10 @@ namespace Mdb
         {"Volume",     FieldType::Int64,  offsetof(TestMultiChunkRow, Volume),     0},
         {"LastPrice",  FieldType::Double, offsetof(TestMultiChunkRow, LastPrice),  0},
     };
-    static void DeallocateTestMultiChunkRow(void* record)
-    {
-        static_cast<TestMultiChunkRow*>(record)->Deallocate();
-    }
     const TableSchema& TestMultiChunkRow::GetSchema()
     {
         static const TableSchema schema = {
-            "t_test_multichunk", TestMultiChunkRowFields, 3, nullptr, 0,
-            DeallocateTestMultiChunkRow, nullptr, 0,
+            "t_test_multichunk", TestMultiChunkRowFields, 3, nullptr, 0, nullptr, 0,
         };
         return schema;
     }
@@ -490,15 +488,10 @@ namespace Mdb
         {"UInt64Value", FieldType::UInt64, offsetof(TestNarrowRow, UInt64Value), 0},
         {"TailGuard",   FieldType::Int32,  offsetof(TestNarrowRow, TailGuard),   0},
     };
-    static void DeallocateTestNarrowRow(void* record)
-    {
-        static_cast<TestNarrowRow*>(record)->Deallocate();
-    }
     const TableSchema& TestNarrowRow::GetSchema()
     {
         static const TableSchema schema = {
-            "t_test_narrow", TestNarrowRowFields, 9, nullptr, 0,
-            DeallocateTestNarrowRow, nullptr, 0,
+            "t_test_narrow", TestNarrowRowFields, 9, nullptr, 0, nullptr, 0,
         };
         return schema;
     }
@@ -814,15 +807,10 @@ namespace Mdb
         {"UInt64Type",    FieldType::Char, offsetof(TestTypeNameRow, UInt64Type),    sizeof(TestTypeNameRow::UInt64Type)},
         {"HeadGuardType", FieldType::Char, offsetof(TestTypeNameRow, HeadGuardType), sizeof(TestTypeNameRow::HeadGuardType)},
     };
-    static void DeallocateTestTypeNameRow(void* record)
-    {
-        static_cast<TestTypeNameRow*>(record)->Deallocate();
-    }
     const TableSchema& TestTypeNameRow::GetSchema()
     {
         static const TableSchema schema = {
-            "t_test_typename", TestTypeNameRowFields, 7, nullptr, 0,
-            DeallocateTestTypeNameRow, nullptr, 0,
+            "t_test_typename", TestTypeNameRowFields, 7, nullptr, 0, nullptr, 0,
         };
         return schema;
     }
@@ -1005,6 +993,52 @@ static bool TestBackendLoader()
     return allPassed;
 }
 
+// ===================== 记录归属端到端烟雾测试 =====================
+
+// 单测用替身断言丢弃与归还的计数, 这里断言同一套句柄语义跨真实后端与 DLL 边界成立, 且归还恰好一次.
+static bool TestAsyncWriterRecordOwnership()
+{
+    std::atomic<int> releaseCount{ 0 };
+    const TableSchema* probeSchema = &OwnershipProbeRecord::GetSchema();
+    StaticSchemaRegistry schemaRegistry(&probeSchema, 1);
+
+    AsyncDbWriter* writer = new AsyncDbWriter(new SqliteWrapper(sqliteDbName), &schemaRegistry);
+    // 建表与清表在写线程启动前完成: 此时独占 Db, 不存在与写线程的并发访问.
+    writer->GetDb()->CreateTables(&probeSchema, 1);
+    writer->GetDb()->TruncateTables(&probeSchema, 1);
+    writer->Start();
+    writer->OnRecordInsert(0, AdoptRecord(AllocateProbeRecord(releaseCount, 1)));
+
+    TypedTable<OwnershipProbeRecord> probeTable(writer->GetDb());
+    std::vector<OwnershipProbeRecord*> probeRows;
+    const bool rowWritten = WaitUntil([&]
+    {
+        for (OwnershipProbeRecord* probeRow : probeRows)
+        {
+            probeRow->Deallocate();
+        }
+        probeRows.clear();
+        probeTable.SelectAll(probeRows);
+        return !probeRows.empty();
+    }, 5000);
+    for (OwnershipProbeRecord* probeRow : probeRows)
+    {
+        probeRow->Deallocate();
+    }
+    probeRows.clear();
+
+    // 归还发生在写线程处理完该操作之后, 故须等 Join 建立 happens-before 再读计数.
+    writer->Stop();
+    writer->Join();
+    delete writer;
+
+    const bool releasedOnce = releaseCount.load() == 1;
+    const bool passed = rowWritten && releasedOnce;
+    WriteLog(passed ? LogLevel::Info : LogLevel::Error,
+        "TestAsyncWriterRecordOwnership: rowWritten=%d releasedOnce=%d", rowWritten ? 1 : 0, releasedOnce ? 1 : 0);
+    return passed;
+}
+
 int main(int argc, char* argv[])
 {
 	Logger::GetInstance().Init(argv[0]);
@@ -1022,10 +1056,11 @@ int main(int argc, char* argv[])
     TestDuckdbNarrowColumnTypes();
     TestFailureVisibility();
     const bool backendLoaderPassed = TestBackendLoader();
+    const bool asyncWriterOwnershipPassed = TestAsyncWriterRecordOwnership();
     //TestMysql();
     //TestMariadb();
 
 	Logger::GetInstance().Stop();
 	Logger::GetInstance().Join();
-	return backendLoaderPassed ? 0 : 1;
+	return backendLoaderPassed && asyncWriterOwnershipPassed ? 0 : 1;
 }

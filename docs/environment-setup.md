@@ -2,7 +2,7 @@
 
 > 本文档面向 **Windows（MSVC）** 和 **WSL（GCC）** 两个平台，说明从零搭建项目编译环境所需的全部步骤。
 
-> **项目依赖概览（DbAdapters）**：除下述通用工具链外，还需准备 **Spark** 基础库与 **DuckDB** 两个预编译依赖（分别安装到项目父目录 `../Libs/Spark/<triplet>`、`../Libs/duckdb/<triplet>`），并由 vcpkg 提供 `sqlite3`、`mysql-connector-cpp`、`mariadb-connector-cpp` 三个数据库驱动。完整说明见仓库根目录 [README](../README.md) 的"环境依赖"章节。
+> **项目依赖概览（DbAdapters）**：除下述通用工具链外，还需准备 **Spark** 基础库与 **DuckDB** 两个预编译依赖（分别安装到项目父目录 `../Libs/Spark/<triplet>`、`../Libs/duckdb/<triplet>`），并由 vcpkg 提供 `sqlite3`、`mysql-connector-cpp`、`mariadb-connector-cpp` 三个数据库驱动；构建单元测试还需 `../Libs/doctest`（doctest 单头，见 [1.7](#17-doctest单元测试框架)）。完整说明见仓库根目录 [README](../README.md) 的"环境依赖"章节。
 
 ---
 
@@ -17,6 +17,7 @@
     - [1.4 代理配置（可选但推荐）](#14-代理配置可选但推荐)
     - [1.5 vcpkg](#15-vcpkg)
     - [1.6 验证](#16-验证)
+    - [1.7 doctest（单元测试框架）](#17-doctest单元测试框架)
   - [二、WSL（GCC）](#二wslgcc)
     - [2.1 系统要求](#21-系统要求)
     - [2.2 WSL 安装与配置](#22-wsl-安装与配置)
@@ -119,6 +120,56 @@ setx VCPKG_ROOT "D:/path/to/vcpkg"
 - 控制台应输出 vcpkg 相关日志（自动安装 `sqlite3`、`mysql-connector-cpp`、`mariadb-connector-cpp` 及其传递依赖）
 - 配置完成后能正确找到 **Spark**、**duckdb** 与各数据库驱动（无 `Could not find ...` 报错）
 - 构建无报错，`bin/Debug/TestDB.exe` 可正常运行
+
+### 1.7 doctest（单元测试框架）
+
+`test/UnitTests` 用 doctest 承载记录归属等纯逻辑用例。doctest 是**单头文件、纯头文件、无 lib、无平台差异**，
+且**不入任何版本库**（与 `Libs/Spark`、`Libs/duckdb` 等安装树同属本地依赖树），因此新环境须手工放一次。
+
+> **注意**：doctest 无 triplet 子目录，但**平台之间并不共用同一份**——落点写的是
+> `${sourceDir}/../Libs/doctest`，而 `sourceDir` 在两个平台上不是同一个目录：
+> Windows 直接构建 `D:\Gitee\DbAdapters`（落点 `D:\Gitee\Libs\doctest`），
+> WSL 走 Visual Studio 的远程副本 `~/.vs/DBAdapters`（落点 `~/.vs/Libs/doctest`）。
+> 两边**各放一份**，互相不可见。
+
+放置位置（相对本项目父目录，即各仓同级的 `Libs`）：
+
+```text
+Libs/doctest/
+├── LICENSE.txt
+├── include/doctest/doctest.h
+└── lib/cmake/doctest/doctestConfig.cmake
+```
+
+- `doctest.h`：**v2.5.3**（`DOCTEST_VERSION_MAJOR/MINOR/PATCH` = 2 / 5 / 3），
+  取自 <https://github.com/doctest/doctest>，MIT 协议；`LICENSE.txt` 为同协议的许可正文。
+- `doctestConfig.cmake`：照 `Libs/duckdb` 的手写 config 范式，从 `lib/cmake/doctest/` 走回前缀，
+  导出头文件目标 `doctest::doctest`。内容如下：
+
+```cmake
+get_filename_component(_IMPORT_PREFIX "${CMAKE_CURRENT_LIST_FILE}" PATH)
+get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)
+get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)
+get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)
+
+add_library(doctest::doctest INTERFACE IMPORTED)
+set_target_properties(doctest::doctest PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include"
+    INTERFACE_COMPILE_FEATURES "cxx_std_11"
+)
+
+set(doctest_FOUND TRUE)
+```
+
+消费方在根 `CMakeLists.txt` 里按既有惯例声明：
+
+```cmake
+find_package(doctest CONFIG REQUIRED PATHS "../Libs/doctest")
+```
+
+> **注意**：doctest 无 triplet 子目录，故这一行不进 `if(WIN32)` 分支（`find_package` 那行两个平台
+> 完全相同，不同的只是 `${sourceDir}/../Libs/` 落在哪个盘）。放好后可跑
+> `bin/Debug/UnitTests.exe`（Windows）或 `bin/Debug/UnitTests`（WSL），两者都应输出 `8 passed`。
 
 ---
 

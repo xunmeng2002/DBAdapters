@@ -2,7 +2,7 @@
 
 > This document covers both **Windows (MSVC)** and **WSL (GCC)** platforms, detailing every step required to set up the build environment from scratch.
 
-> **Dependency overview (DbAdapters)**: besides the generic toolchain below, two prebuilt dependencies are required — the **Spark** foundational library and **DuckDB** (installed under the project's parent directory at `../Libs/Spark/<triplet>` and `../Libs/duckdb/<triplet>`), plus the `sqlite3`, `mysql-connector-cpp`, and `mariadb-connector-cpp` drivers provided by vcpkg. See the "Environment Dependencies" section of the [README](../README.en.md) for details.
+> **Dependency overview (DbAdapters)**: besides the generic toolchain below, two prebuilt dependencies are required — the **Spark** foundational library and **DuckDB** (installed under the project's parent directory at `../Libs/Spark/<triplet>` and `../Libs/duckdb/<triplet>`), plus the `sqlite3`, `mysql-connector-cpp`, and `mariadb-connector-cpp` drivers provided by vcpkg; building the unit tests additionally requires `../Libs/doctest` (the doctest single header, see [1.7](#17-doctest-unit-test-framework)). See the "Environment Dependencies" section of the [README](../README.en.md) for details.
 
 ---
 
@@ -17,6 +17,7 @@
     - [1.4 Proxy Configuration (Optional but Recommended)](#14-proxy-configuration-optional-but-recommended)
     - [1.5 vcpkg](#15-vcpkg)
     - [1.6 Verification](#16-verification)
+    - [1.7 doctest (Unit Test Framework)](#17-doctest-unit-test-framework)
   - [2. WSL (GCC)](#2-wsl-gcc)
     - [2.1 System Requirements](#21-system-requirements)
     - [2.2 WSL Setup](#22-wsl-setup)
@@ -119,6 +120,61 @@ Open **Visual Studio**, select the `x64-Debug` configuration, and run CMake conf
 - The output should show vcpkg-related logs (downloading and building `sqlite3`, `mysql-connector-cpp`, and `mariadb-connector-cpp` with their transitive dependencies)
 - After configuration, **Spark**, **duckdb**, and all database drivers should be found successfully (no `Could not find ...` errors)
 - Build should complete without errors, and `bin/Debug/TestDB.exe` should run
+
+### 1.7 doctest (Unit Test Framework)
+
+`test/UnitTests` uses doctest for pure-logic cases such as record ownership. doctest is a
+**single header, header-only, no lib, no platform difference**, and it is **not committed to any
+repository** (it belongs to the local dependency tree alongside the `Libs/Spark` and
+`Libs/duckdb` install trees), so a new environment must place it manually once.
+
+> **Note**: doctest has no triplet subdirectory, but the two platforms do **not** share one copy.
+> The search path is `${sourceDir}/../Libs/doctest`, and `sourceDir` is not the same directory on
+> both: Windows builds `D:\Gitee\DbAdapters` directly (placement `D:\Gitee\Libs\doctest`), while
+> WSL builds Visual Studio's remote copy `~/.vs/DBAdapters` (placement `~/.vs/Libs/doctest`).
+> Place it on **each side**; neither sees the other.
+
+Placement (relative to this project's parent directory, i.e. the `Libs` directory
+that sits next to the repositories):
+
+```text
+Libs/doctest/
+├── LICENSE.txt
+├── include/doctest/doctest.h
+└── lib/cmake/doctest/doctestConfig.cmake
+```
+
+- `doctest.h`: **v2.5.3** (`DOCTEST_VERSION_MAJOR/MINOR/PATCH` = 2 / 5 / 3), taken from
+  <https://github.com/doctest/doctest>, MIT licensed; `LICENSE.txt` is the matching license text.
+- `doctestConfig.cmake`: follows the hand-written config pattern of `Libs/duckdb`, walking back
+  to the prefix from `lib/cmake/doctest/` and exporting the header target `doctest::doctest`.
+  Its contents:
+
+```cmake
+get_filename_component(_IMPORT_PREFIX "${CMAKE_CURRENT_LIST_FILE}" PATH)
+get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)
+get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)
+get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)
+
+add_library(doctest::doctest INTERFACE IMPORTED)
+set_target_properties(doctest::doctest PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include"
+    INTERFACE_COMPILE_FEATURES "cxx_std_11"
+)
+
+set(doctest_FOUND TRUE)
+```
+
+Consumers declare it in the root `CMakeLists.txt` following the existing convention:
+
+```cmake
+find_package(doctest CONFIG REQUIRED PATHS "../Libs/doctest")
+```
+
+> **Note**: doctest has no triplet subdirectory, so this line does not go inside the `if(WIN32)`
+> branch (the `find_package` line is identical on both platforms; only where
+> `${sourceDir}/../Libs/` lands differs). Once placed, running `bin/Debug/UnitTests.exe`
+> (Windows) or `bin/Debug/UnitTests` (WSL) should print `8 passed`.
 
 ---
 

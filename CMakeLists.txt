@@ -116,6 +116,7 @@ endif()
 
 option(BUILD_TESTS "Build test projects" ON)
 if(BUILD_TESTS)
+    find_package(doctest CONFIG REQUIRED PATHS "../Libs/doctest")
     add_subdirectory(test)
 endif()
 

@@ -316,11 +316,10 @@ static const FieldDescriptor TradingDayFields[] = {
 	{"PreTradingDay",  FieldType::Char,  offsetof(TradingDay, PreTradingDay), sizeof(TradingDay::PreTradingDay)},
 };
 static const int TradingDayPKIndices[] = {0};
-static void DeallocateTradingDay(void* r) { static_cast<TradingDay*>(r)->Deallocate(); }
 
 const TableSchema& TradingDay::GetSchema()
 {
-	static const TableSchema schema = {"t_TradingDay", TradingDayFields, 3, TradingDayPKIndices, 1, DeallocateTradingDay, nullptr, 0};
+	static const TableSchema schema = {"t_TradingDay", TradingDayFields, 3, TradingDayPKIndices, 1, nullptr, 0};
 	return schema;
 }
 
@@ -329,10 +328,9 @@ static const FieldDescriptor ExchangeFields[] = {
 	{"ExchangeName", FieldType::Char, offsetof(Exchange, ExchangeName), sizeof(Exchange::ExchangeName)},
 };
 static const int ExchangePKIndices[] = {0};
-static void DeallocateExchange(void* r) { static_cast<Exchange*>(r)->Deallocate(); }
 const TableSchema& Exchange::GetSchema()
 {
-	static const TableSchema schema = {"t_Exchange", ExchangeFields, 2, ExchangePKIndices, 1, DeallocateExchange, nullptr, 0};
+	static const TableSchema schema = {"t_Exchange", ExchangeFields, 2, ExchangePKIndices, 1, nullptr, 0};
 	return schema;
 }
 
@@ -350,10 +348,9 @@ static const FieldDescriptor ProductFields[] = {
 	{"SessionName",          FieldType::Char,   offsetof(Product, SessionName),          sizeof(Product::SessionName)},
 };
 static const int ProductPKIndices[] = {0, 1};
-static void DeallocateProduct(void* r) { static_cast<Product*>(r)->Deallocate(); }
 const TableSchema& Product::GetSchema()
 {
-	static const TableSchema schema = {"t_Product", ProductFields, 11, ProductPKIndices, 2, DeallocateProduct, nullptr, 0};
+	static const TableSchema schema = {"t_Product", ProductFields, 11, ProductPKIndices, 2, nullptr, 0};
 	return schema;
 }
 
@@ -375,10 +372,9 @@ static const FieldDescriptor InstrumentFields[] = {
 	{"SessionName",          FieldType::Char,   offsetof(Instrument, SessionName),          sizeof(Instrument::SessionName)},
 };
 static const int InstrumentPKIndices[] = {0, 1};
-static void DeallocateInstrument(void* r) { static_cast<Instrument*>(r)->Deallocate(); }
 const TableSchema& Instrument::GetSchema()
 {
-	static const TableSchema schema = {"t_Instrument", InstrumentFields, 15, InstrumentPKIndices, 2, DeallocateInstrument, nullptr, 0};
+	static const TableSchema schema = {"t_Instrument", InstrumentFields, 15, InstrumentPKIndices, 2, nullptr, 0};
 	return schema;
 }
 
@@ -394,14 +390,13 @@ static const FieldDescriptor PrimaryAccountFields[] = {
 	{"InitStatus",         FieldType::Int32,   offsetof(PrimaryAccount, InitStatus),         0},
 };
 static const int PrimaryAccountPKIndices[] = {0};
-static void DeallocatePrimaryAccount(void* r) { static_cast<PrimaryAccount*>(r)->Deallocate(); }
 const TableSchema& PrimaryAccount::GetSchema()
 {
 	static const int kPrimaryAccountIdxOfferID[] = {4};
 	static const IndexDefinition PrimaryAccountIndices[] = {
 		{0x0000, kPrimaryAccountIdxOfferID, 1},
 	};
-	static const TableSchema schema = {"t_PrimaryAccount", PrimaryAccountFields, 9, PrimaryAccountPKIndices, 1, DeallocatePrimaryAccount, PrimaryAccountIndices, 1};
+	static const TableSchema schema = {"t_PrimaryAccount", PrimaryAccountFields, 9, PrimaryAccountPKIndices, 1, PrimaryAccountIndices, 1};
 	return schema;
 }
 
@@ -416,10 +411,9 @@ static const FieldDescriptor AccountFields[] = {
 	{"CommissionGroupId",  FieldType::Int32,  offsetof(Account, CommissionGroupId),  0},
 };
 static const int AccountPKIndices[] = {0};
-static void DeallocateAccount(void* r) { static_cast<Account*>(r)->Deallocate(); }
 const TableSchema& Account::GetSchema()
 {
-	static const TableSchema schema = {"t_Account", AccountFields, 8, AccountPKIndices, 1, DeallocateAccount, nullptr, 0};
+	static const TableSchema schema = {"t_Account", AccountFields, 8, AccountPKIndices, 1, nullptr, 0};
 	return schema;
 }
 
@@ -446,14 +440,13 @@ static const FieldDescriptor CapitalFields[] = {
 	{"Withdraw",               FieldType::Double, offsetof(Capital, Withdraw),               0},
 };
 static const int CapitalPKIndices[] = {0, 1};
-static void DeallocateCapital(void* r) { static_cast<Capital*>(r)->Deallocate(); }
 const TableSchema& Capital::GetSchema()
 {
 	static const int kCapitalIdxTradingDay[] = {0};
 	static const IndexDefinition CapitalIndices[] = {
 		{0x0000, kCapitalIdxTradingDay, 1},
 	};
-	static const TableSchema schema = {"t_Capital", CapitalFields, 20, CapitalPKIndices, 2, DeallocateCapital, CapitalIndices, 1};
+	static const TableSchema schema = {"t_Capital", CapitalFields, 20, CapitalPKIndices, 2, CapitalIndices, 1};
 	return schema;
 }
 
@@ -485,7 +478,6 @@ static const FieldDescriptor PositionFields[] = {
 	{"PreSettlementPrice",    FieldType::Double, offsetof(Position, PreSettlementPrice),    0},
 };
 static const int PositionPKIndices[] = {0, 1, 2, 3, 6};
-static void DeallocatePosition(void* r) { static_cast<Position*>(r)->Deallocate(); }
 const TableSchema& Position::GetSchema()
 {
 	static const int kPositionIdxAccount[] = {0, 1};
@@ -494,7 +486,7 @@ const TableSchema& Position::GetSchema()
 		{0x0000, kPositionIdxAccount, 2},
 		{0x0001, kPositionIdxTradingDay, 1},
 	};
-	static const TableSchema schema = {"t_Position", PositionFields, 25, PositionPKIndices, 5, DeallocatePosition, PositionIndices, 2};
+	static const TableSchema schema = {"t_Position", PositionFields, 25, PositionPKIndices, 5, PositionIndices, 2};
 	return schema;
 }
 
@@ -526,7 +518,6 @@ static const FieldDescriptor PositionDetailFields[] = {
 	{"CloseAmount",           FieldType::Double, offsetof(PositionDetail, CloseAmount),           0},
 };
 static const int PositionDetailPKIndices[] = {0, 1, 2, 3, 6, 7, 8};
-static void DeallocatePositionDetail(void* r) { static_cast<PositionDetail*>(r)->Deallocate(); }
 const TableSchema& PositionDetail::GetSchema()
 {
 	static const int kPositionDetailIdxTradeMatch[] = {0, 1, 2, 3, 6};
@@ -535,7 +526,7 @@ const TableSchema& PositionDetail::GetSchema()
 		{0x0000, kPositionDetailIdxTradeMatch, 5},
 		{0x0001, kPositionDetailIdxTradingDay, 1},
 	};
-	static const TableSchema schema = {"t_PositionDetail", PositionDetailFields, 25, PositionDetailPKIndices, 7, DeallocatePositionDetail, PositionDetailIndices, 2};
+	static const TableSchema schema = {"t_PositionDetail", PositionDetailFields, 25, PositionDetailPKIndices, 7, PositionDetailIndices, 2};
 	return schema;
 }
 
@@ -575,10 +566,9 @@ static const FieldDescriptor OrderFields[] = {
 	{"IsForceClose",          FieldType::Bool,   offsetof(Order, IsForceClose),          0},
 };
 static const int OrderPKIndices[] = {0, 1, 2, 3, 6};
-static void DeallocateOrder(void* r) { static_cast<Order*>(r)->Deallocate(); }
 const TableSchema& Order::GetSchema()
 {
-	static const TableSchema schema = {"t_Order", OrderFields, 33, OrderPKIndices, 5, DeallocateOrder, nullptr, 0};
+	static const TableSchema schema = {"t_Order", OrderFields, 33, OrderPKIndices, 5, nullptr, 0};
 	return schema;
 }
 
@@ -603,10 +593,9 @@ static const FieldDescriptor TradeFields[] = {
 	{"TradeTime",       FieldType::Char,   offsetof(Trade, TradeTime),       sizeof(Trade::TradeTime)},
 };
 static const int TradePKIndices[] = {0, 3, 8, 9};
-static void DeallocateTrade(void* r) { static_cast<Trade*>(r)->Deallocate(); }
 const TableSchema& Trade::GetSchema()
 {
-	static const TableSchema schema = {"t_Trade", TradeFields, 18, TradePKIndices, 4, DeallocateTrade, nullptr, 0};
+	static const TableSchema schema = {"t_Trade", TradeFields, 18, TradePKIndices, 4, nullptr, 0};
 	return schema;
 }
 
