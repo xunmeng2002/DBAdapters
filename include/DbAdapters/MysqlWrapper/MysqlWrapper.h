@@ -10,7 +10,7 @@ namespace DbAdapters
 class MYSQLWRAPPER_EXPORTS MysqlWrapper : public Db
 {
 public:
-    MysqlWrapper(const std::string& host);
+    explicit MysqlWrapper(const std::string& host);
     ~MysqlWrapper() override;
 
     bool Connect() override;

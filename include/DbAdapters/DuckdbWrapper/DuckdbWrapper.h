@@ -10,7 +10,7 @@ namespace DbAdapters
 class DUCKDBWRAPPER_EXPORTS DuckdbWrapper : public Db
 {
 public:
-    DuckdbWrapper(const std::string& dbName);
+    explicit DuckdbWrapper(const std::string& dbName);
     ~DuckdbWrapper() override;
 
     bool Connect() override;

@@ -36,11 +36,11 @@ public:
     RecordHandle(const RecordHandle&) = delete;
     RecordHandle& operator=(const RecordHandle&) = delete;
 
-    void* Get() const noexcept { return record_; }
+    const void* Get() const noexcept { return record_; }
 
     void Reset() noexcept
     {
-        if (releaseRecord_ != nullptr)
+        if (releaseRecord_ != nullptr && record_ != nullptr)
         {
             releaseRecord_(record_);
         }

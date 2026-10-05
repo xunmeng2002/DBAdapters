@@ -10,7 +10,7 @@ namespace DbAdapters
 class SQLITEWRAPPER_EXPORTS SqliteWrapper : public Db
 {
 public:
-	SqliteWrapper(const std::string& dbName);
+	explicit SqliteWrapper(const std::string& dbName);
 	~SqliteWrapper() override;
 
 	bool Connect() override;

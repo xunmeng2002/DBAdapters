@@ -7,6 +7,8 @@ namespace DbAdapters
 class DbOperate
 {
 public:
+	virtual ~DbOperate() = default;
+
 	static DbOperate* Allocate();
 	virtual void Deallocate() = 0;
 

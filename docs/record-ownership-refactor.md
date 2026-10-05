@@ -401,11 +401,41 @@ Debug 版 `ObjectPool` 带 `OwnedItemRegistry`（`ObjectPool.h:136-205`），可
 都交给句柄析构，代价是该分支下调用方原始记录也会被释放（现有三处调用点 `ThostFtdcTraderSpiImpl.cpp`
 交出后均不再使用，已核对）。**待用户裁定。**
 
-### 9.1 批后审查提出、按 §3 上报未改的三条
+### 9.1 批后审查提出的四条（2026-10-05 发布前 API 冻结批分两批处置）
 
-| # | 问题 | 当前是否可达 | 改动代价 |
+| # | 问题 | 当前是否可达 | 处置（2026-10-05） |
 | :--- | :--- | :--- | :--- |
 | 1 | `~AsyncDbWriter()` 不抽干待办队列：`DropPendingOperates()` 只在 `DisConnect()` 里调用，析构时队列里的 `DbOperate` 连同其 `RecordHandle` 持有的记录一并泄漏。**非本批引入**（旧代码同样不抽干，只漏操作对象），但重构后同一条路径多漏一份记录 | 是（仍有待办时析构即触发） | 析构里补一次 `DropPendingOperates()`，或先 `Stop()` / `Join()`；牵动"析构时写线程是否已停"的时序假设 |
-| 2 | `DbOperate` 有纯虚 `Deallocate()` 却无虚析构（`rules/cpp-style.md` §6 强制项，既有） | 否——全程经 `ObjectPool<DbOperateImpl>` 按具体类型归还，仓内无 `delete DbOperate*` | 补虚析构会改 `DbOperate` 布局与虚表，属导出符号的 ABI 断裂，须三仓 + 安装树同步 |
-| 3 | `RecordHandle::Reset()` 未对 `record_` 判空：`AdoptRecord(nullptr)` 会以空指针调用 `record->Deallocate()` | 否——三处工厂实现为 `ObjectPool::Deallocate`（自带空指针早退）与 `delete`（空指针安全） | 一行判空；但会掩盖调用方传入空记录的错误，需先定"空记录算不算合法入参" |
-| 4 | `RecordHandle::Get()` 返回可变 `void*`，`rules/cpp-style.md` §7 建议 getter 返回 const | 否——5 处调用点全部把结果交给 `const void*` 形参（`Db::Insert`/`Delete`/`Update`/`BatchInsert`），无一处需要可写指针 | 改成 `const void* Get() const noexcept` 即收紧契约。**属公开头文件签名，按 §3 上报未改**；趁首次提交前改掉最省事，一旦提交、下游跟进后就变成真正的 API 变更 |
+| 2 | `DbOperate` 有纯虚 `Deallocate()` 却无虚析构（`rules/cpp-style.md` §6 强制项，既有） | 否——全程经 `ObjectPool<DbOperateImpl>` 按具体类型归还，仓内无 `delete DbOperate*` | **已改**：补 `virtual ~DbOperate() = default;`。虚表多一槽，属导出符号的 ABI 变更，已随本批 `cmake --install` 与 Mdb / QuantTrading 重建一并同步（`DbOperate` 只在本库内构造，消费方从不构造或析构它） |
+| 3 | `RecordHandle::Reset()` 未对 `record_` 判空：`AdoptRecord(nullptr)` 会以空指针调用 `record->Deallocate()` | 否——三处工厂实现为 `ObjectPool::Deallocate`（自带空指针早退）与 `delete`（空指针安全） | **已改**：改为 `if (releaseRecord_ != nullptr && record_ != nullptr)`——空记录统一按"未持有"处理，与 `BorrowRecord` 语义一致；**不构成"掩盖错误"**，因为本就无记录可漏，缺的只是不崩。新增用例「空记录不调用归还回调」钉住（改前会在 `Deallocate()` 里以空 `this` 读成员而崩） |
+| 4 | `RecordHandle::Get()` 返回可变 `void*`，`rules/cpp-style.md` §7 建议 getter 返回 const | 否——5 处调用点全部把结果交给 `const void*` 形参（`Db::Insert`/`Delete`/`Update`/`BatchInsert`），无一处需要可写指针 | **已改**：`const void* Get() const noexcept`。5 处调用点（`AsyncDbWriter.cpp:308/323/332/345/358`）逐处核对为「传 `const void*` 形参」或「`push_back` 进 `std::vector<const void*>`」，无一处需要可写指针，故是纯收紧、零调用点改动 |
+
+
+## 10. 发布前 API 冻结批（2026-10-05）
+
+Release 前按 Harness §3 逐条裁定公开 API 面，用户指令「1234 都改了吧」（第 5 条即 §9 的
+`Table::BatchInsert` 未订阅分支，用户另议：「我再看看」）。本批四项：
+
+| # | 改动 | 文件 | 性质 |
+| :--- | :--- | :--- | :--- |
+| A1 | `void* Get() const noexcept` → `const void* Get() const noexcept` | `RecordHandle.h` | 公开头签名收紧 |
+| A2 | 三个单参构造成员加 `explicit` | 三个 Wrapper 头 | 公开头签名：删去隐式转换路径 |
+| A3 | 补 `virtual ~DbOperate() = default;` | `DbOperate.h` | 导出符号：vtable 多一槽 |
+| A4 | `Reset()` 加 `record_ != nullptr` 判空 | `RecordHandle.h` | 头内实现，行为收紧 |
+
+**A2 的调用点核对**：全盘（DbAdapters / Mdb / QuantTrading）三处 Wrapper 的构造**全是直接初始化**
+（`new X(...)`、`X name(...)`、`return new X(...)`），无一处依赖隐式转换，故加 `explicit` 零破坏；
+`MariadbWrapper` 为 3 参构造本就不受该规范约束，四家由此一致。
+
+**A3 的同步面**：`DbOperate` 只在本库内构造——`DbOperate::Allocate()` 与 `ObjectPool<DbOperateImpl>`
+都定义在 `DbOperateImpl.cpp`，消费方既不构造也不析构它。故 vtable 变更的实质影响面是本库 + 安装树；
+仍按 §5.4 的纪律把 Mdb / QuantTrading 一并重建，不留半更新状态。
+
+**未纳入本批**：§9 的 `Table::BatchInsert` 未订阅分支，以及 §9.1 第 1 条
+（`~AsyncDbWriter()` 不抽干待办队列）。两条均为发布后要修的悬项，登记在 `PROGRESS.md` ❓ 区。
+
+**验证**：`UnitTests.exe` → **9 用例 / 26 断言全过、退出码 0**（改前 8 / 24，新增「空记录不调用归还回调」）；
+`TestDB.exe` 退出码 0、`TestAsyncWriterRecordOwnership: rowWritten=1 releasedOnce=1`；`cmake --install`
+把新头与新 DLL 落到 `../Libs/DbAdapters/x64-windows`（非 Up-to-date）；随后 Mdb `TestMdb` 重建 + 实跑
+退出码 0（27 行，`grep "ownership\|Assertion\|ObjectPool"` 零命中）、QuantTrading `SimExchangeInit`
+重建退出码 0（未运行，需 CTP 环境）。

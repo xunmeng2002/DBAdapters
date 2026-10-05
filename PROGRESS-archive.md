@@ -49,6 +49,30 @@
 
 ## ❓ 待讨论（已关闭 / 已了结，倒序）
 
+### Q.07 · 2026-10-05 · `RecordHandle::Get()` 的可变性（第二轮审查发现）
+
+**原文（2026-10-05）**：
+
+- **`RecordHandle::Get()` 的可变性（2026-10-05 第二轮审查发现，未改）**：现返回 `void*`，而 `rules/cpp-style.md` §7 要求"返回内部指针/引用的 getter 应返回 `const&`"。**当前 5 处调用点没有一个需要可写指针**——`Db::Insert` / `Delete` / `Update` / `BatchInsert` 的形参全是 `const void*`（`Db.h:27-30`），`TestDB.cpp` 只用它判空。改成 `const void* Get() const noexcept` 即可收紧契约，编译期可验证。**未改的理由**：它落在公开头文件 `RecordHandle.h` 上，按 Harness §3 属"公开 API"须先经同意。**但趁首次提交前改最省事**：一旦提交、下游跟进后再改就成了真正的 API 变更。
+
+**关闭（2026-10-05，发布前 API 冻结批）**：用户裁定「1234 都改了吧」→ 已改为 `const void* Get() const noexcept`。5 处调用点逐处核对为「传给 `const void*` 形参」或「`push_back` 进 `std::vector<const void*>`」，无一处需要可写指针，故是纯收紧、零调用点改动。
+
+### Q.06 · 2026-10-05 · 记录归属重构后审查的三条（`~AsyncDbWriter()` 不抽干队列 / `DbOperate` 无虚析构 / `RecordHandle::Reset()` 未判空）
+
+**原文（2026-10-05）**：
+
+- **记录归属重构后 code-reviewer 提出的三条（2026-10-05，均属 §3 强制确认点，未改）**：① **`~AsyncDbWriter()` 不抽干待办队列**——`DropPendingOperates()` 只在 `DisConnect()` 里被调用，故 `AsyncDbWriter` 若在仍有待办时被析构，队列里的 `DbOperate` 连同其 `RecordHandle` 持有的记录一并泄漏。**该缺陷不是本批引入的**（旧代码同样不抽干，漏的只是操作对象），但重构后同一条路径多漏一份记录。候补修法是在析构里补一次 `DropPendingOperates()`（或先 `Stop()` / `Join()`），**待裁定**——它牵动"析构时写线程是否已停"这条时序假设。② **`DbOperate` 有纯虚 `Deallocate()` 却无虚析构**（`rules/cpp-style.md` §6「非虚析构的基类继承」为强制项，既有）——`DbOperate` 全程经 `ObjectPool<DbOperateImpl>` 按**具体类型**归还，仓内不存在 `delete DbOperate*` 路径，故当前不构成实际缺陷；补虚析构会改变 `DbOperate` 的布局与虚表，属导出符号层面的 ABI 断裂，须与三仓 + 安装树同步。③ **`RecordHandle::Reset()` 未对 `record_` 判空**——`AdoptRecord(nullptr)` 会以空指针调用 `record->Deallocate()`。仓内三处工厂实现分别为 `ObjectPool::Deallocate`（自带空指针早退）与 `delete`（空指针安全），故当前**不可达**，但契约上是个坑。三条皆**未改**，等用户裁定。
+
+**部分关闭（2026-10-05，发布前 API 冻结批）**：用户裁定「1234 都改了吧」→ ② 已补 `virtual ~DbOperate() = default;`（导出符号层 vtable 多一槽，属 ABI 变更，已随本批 `cmake --install` 与 Mdb / QuantTrading 重建一并同步）；③ 已改为 `if (releaseRecord_ != nullptr && record_ != nullptr)`，空记录统一按"未持有"处理（与 `BorrowRecord` 一致；不掩盖泄漏，本就无记录可漏），并新增用例「空记录不调用归还回调」钉住（改前会在 `Deallocate()` 里以空 `this` 读成员而崩）。**① 仍未改，未决部分留在主文件 ❓ 区**（改写为短版并指向本条）。
+
+### Q.05 · 2026-10-04 · 单参数构造函数缺 `explicit`（三个 Wrapper）
+
+**原文（2026-10-04）**：
+
+- **单参数构造函数缺 `explicit`（2026-10-04 code-reviewer 审查发现，既有）**：`SqliteWrapper(const std::string& dbName)`、`DuckdbWrapper(const std::string& dbName)`、`MysqlWrapper(const std::string& host)` 三处构造函数未标 `explicit`，违反 `rules/cpp-style.md` §6「单参数构造函数必须 `explicit`」，可被 `SqliteWrapper w = "path";` 之类隐式转换命中。**未改**：加 `explicit` 会删掉一条现有的隐式转换路径，属公开 API 变更，按 Harness §3 需先经用户同意；且 `MariadbWrapper` 为 3 参构造不涉及，故四个 Wrapper 会短暂不一致，需一并决策。
+
+**关闭（2026-10-05，发布前 API 冻结批）**：用户裁定「1234 都改了吧」→ 三处均加 `explicit`，四个 Wrapper 的不一致随之消失（`MariadbWrapper` 为 3 参构造，本就不受该规范约束）。**调用点已全盘核对**（DbAdapters / Mdb / QuantTrading）：三处 Wrapper 的构造**全是直接初始化**（`new X(...)`、`X name(...)`、`return new X(...)`），无一处依赖隐式转换，故零破坏。
+
 ### Q.04 · 2026-10-05 · 遗留项 ③（`DeallocateRecord` 早退）与「`AsyncDbWriter` 无仓内回归覆盖」
 
 **原文（2026-09-12 复查 / 2026-10-04 记录）**：

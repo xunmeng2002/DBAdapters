@@ -44,6 +44,17 @@ TEST_CASE("移动赋值先归还旧记录")
     CHECK(destinationReleaseCount.load() == 1);
 }
 
+TEST_CASE("空记录不调用归还回调")
+{
+    RecordHandle defaultHandle;
+    CHECK(defaultHandle.Get() == nullptr);
+    defaultHandle.Reset();
+
+    RecordHandle adoptedNull = AdoptRecord<OwnershipProbeRecord>(nullptr);
+    CHECK(adoptedNull.Get() == nullptr);
+    adoptedNull.Reset();
+}
+
 TEST_CASE("容器扩容不重复归还")
 {
     std::atomic<int> releaseCount{ 0 };
