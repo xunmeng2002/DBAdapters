@@ -36,3 +36,6 @@
 /bin
 /out
 /lib
+/log
+*.duckdb
+*.sqlitedb
