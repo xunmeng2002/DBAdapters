@@ -76,6 +76,8 @@ A second, **lower-level entry** loads by module base name (`LoadDatabaseBackend(
 
 For the entry-point contract, the two-step search order, the platform differences and the known limits, see [`docs/backend-runtime-loading.md`](docs/backend-runtime-loading.md) (Chinese).
 
+**To ship a backend**: copy that module (`MysqlWrapper` / `MariadbWrapper`, including the debug postfix) and its client libraries from `Libs/DbAdapters/<triplet>/bin` into the engine's module directory. **MariaDB's authentication plugins are neither shipped nor managed by this library — whoever deploys provides them according to the actual deployment requirements**: `libmariadb`'s `caching_sha2_password` / `sha256_password` / `client_ed25519` plugins are not PE dependencies, so vcpkg's applocal cannot copy them, and `MariadbWrapper::Connect()` overwrites `MARIADB_PLUGIN_DIR` with the absolute path injected at compile time — that path is where the plugins are expected to sit. See [`docs/backend-runtime-loading.md`](docs/backend-runtime-loading.md) §七 for details.
+
 ### 2.3 AsyncDbWriter — Async Persistence
 
 The key component that flushes "in-memory database changes" to disk asynchronously:
@@ -125,7 +127,8 @@ DbAdapters/
 │   ├── backend-runtime-loading.md # Runtime backend loading (design notes, Chinese)
 │   ├── connection-lifecycle.md   # Connection contract and reconnect (design notes, Chinese)
 │   ├── environment-setup.md      # Environment setup guide (Chinese)
-│   └── environment-setup.en.md   # Environment setup guide (English)
+│   ├── environment-setup.en.md   # Environment setup guide (English)
+│   └── record-ownership-refactor.md # Record ownership refactor (design notes and ledger)
 ├── submodules/                   # Submodule dependencies (CMakeCommon)
 ├── bin/                          # Build outputs: dynamic libraries / executables (per config)
 ├── lib/                          # Build outputs: import / static libraries (per config)
@@ -134,7 +137,11 @@ DbAdapters/
 ├── CMakePresets.json             # CMake presets (VS / CLI)
 ├── vcpkg.json                    # vcpkg manifest (third-party drivers)
 ├── UpdateSubmodule.bat/sh        # Submodule update scripts
+├── ConvertToUtf8Bom.py           # Source-to-UTF-8-BOM conversion (tool script)
 ├── Install.sh                    # Linux install script (cmake --install)
+├── PROGRESS.md                   # Progress ledger (cross-session state)
+├── PROGRESS-archive.md           # Archived full text of closed entries
+├── .editorconfig                 # Editor formatting conventions
 ├── .gitmodules                   # Git submodule configuration
 ├── .gitignore                    # Git ignore rules
 └── LICENSE                       # BSD-4-Clause license
@@ -211,6 +218,13 @@ cmake --build out/build/x64-Release
 cmake --preset WSL-GCC-Release
 cmake --build out/build/WSL-GCC-Release
 ```
+
+`BUILD_TESTS` **defaults to `ON`**, so the two commands above also build `test/` (`TestDB` and
+`UnitTests`); configure therefore runs `find_package(doctest CONFIG REQUIRED PATHS "../Libs/doctest")`,
+and that directory must be in place first (see
+[`docs/environment-setup.md`](docs/environment-setup.md) §1.7). A library-only consumer that does not
+want to provide doctest can pass `-DBUILD_TESTS=OFF` to skip `test/`; the `find_package` above then
+does not run.
 
 After building, libraries are output to `lib/<Config>` (Release → `lib/Release`) and executables to `bin/<Config>` (e.g. `bin/Release/TestDB.exe`). On Windows, vcpkg's app-local deployment copies runtime DLLs (`sqlite3.dll`, `mysqlcppconnx-*.dll`, `mariadbcpp.dll`, `duckdb.dll`, etc.) next to the executables automatically.
 
@@ -486,6 +500,12 @@ The project ships the **test/TestDB** integration test program covering all four
 | `TestMariadb` | Full MariaDB CRUD flow (requires a local MariaDB; commented out by default) |
 | `TestDuckdbVectorized` | Vectorized reads: type conversion, NULL sentinels, error propagation |
 | `TestDuckdbVectorizedMultiChunk` | Multi-chunk fallback path: BIGINT→Char, DOUBLE→Int64 row-index correctness across chunks |
+| `TestSqliteNarrowInteger` | Reading back narrow integer columns: unsigned columns and the NULL sentinel (SQLite's 8-byte integer is two's complement with no unsigned column, so the bind side saturates to `INT64_MAX`) |
+| `TestSqliteNarrowSaturation` | Read-side narrowing saturation: out-of-range values in wide columns must saturate cell by cell and roll up into a single Warning |
+| `TestDuckdbNarrowInteger` | Same as the SQLite case, plus DuckDB's vectorized chunk read path |
+| `TestDuckdbNarrowSaturation` | Read-side narrowing saturation (DuckDB, through the vectorized path) |
+| `TestDuckdbNarrowColumnTypes` | DuckDB narrow column-type mapping: each integer width and the NULL sentinel |
+| `TestFailureVisibility` | Failure visibility: operations are deliberately aimed at a missing database / table and the log is asserted to carry the matching ERROR lines (those ERRORs are expected output) |
 | `TestBackendLoader` | Runtime loading: the normal per-kind entry returns a usable object for a backend that loads; a backend that fails to construct returns a readable reason instead of letting the exception cross the C boundary; a low-level per-basename entry covers "module does not exist at all", and the message must name both candidate paths. Failures are reflected in the process exit code |
 | `TestAsyncWriterRecordOwnership` | End-to-end smoke for record ownership: against a real sqlite backend with a real writer thread, a record handed over via `AdoptRecord` must actually land in the table and be released exactly once. The semantic details (borrow, move, batch, exceptions, disconnect) live in the unit tests below. Failures are reflected in the process exit code |
 | `TestReconnect` | Reconnect semantics: after `Connect → DisConnect → Connect` the test creates a table, writes a row and reads it back, asserting the row is really there (once for SQLite, once for DuckDB). The return value of `Connect` alone is not enough — after a disconnect, `Exec` failures are silent. Failures are reflected in the process exit code |
@@ -509,7 +529,7 @@ can be run separately.
 
 | Suite | Cases |
 | :--- | :--- |
-| `RecordHandle` | Move leaves the source empty; move assignment releases the old record first; vector growth does not double-release |
+| `RecordHandle` | Move leaves the source empty; move assignment releases the old record first; vector growth does not double-release; a null record does not invoke the release callback |
 | `RecordOwnership` | A borrowed record is not released; an adopted one is released exactly once; every batch element is released; a throwing execution still releases exactly once; discarding pending operations on disconnect releases exactly once; the destructor drains the pending queue and releases its records; the writer thread reconnects by itself after a disconnect |
 
 ```bash

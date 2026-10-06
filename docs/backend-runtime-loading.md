@@ -187,6 +187,19 @@ Debug 与 Release 取到同一个值。
 即这一次装载只可能来自装载器。**发运 Linux 引擎包时要留意**：模块得摆在引擎模块旁边，否则就要
 靠 `RUNPATH` 指到本库的安装树。
 
+**发运时的拷贝清单**：装载器只在运行时按名字找模块，故引擎包里放什么完全由发运方决定 —— 把
+`Libs/DbAdapters/<triplet>/bin` 下该模块（`MysqlWrapper` / `MariadbWrapper`，含调试后缀）连同其
+客户端库（`libmariadb.dll`、`mariadbcpp.dll`、`mysqlcppconnx-*.dll` 等）拷到引擎模块目录；
+Linux 侧同理换 `.so`，或让 `RUNPATH` 指到本库安装树（见上一段）。
+
+**MariaDB 的认证插件不由本库发运、也不由本库管理**（2026-10-06 裁定）：`libmariadb` 的
+`caching_sha2_password` / `sha256_password` / `client_ed25519` 等插件不是 PE 依赖，vcpkg 的
+applocal 拷不了，本库也不打包它们 —— **由部署方按实际部署需求提供**（服务端要求的认证方式、
+是否用插件，只有部署环境知道）。就位位置由本库编译期决定：`CMakeLists.txt` 的
+`MARIADB_PLUGIN_DIR` 由 `${CMAKE_BINARY_DIR}` 展开成 **构建机上的绝对路径**，
+`MariadbWrapper::Connect()` 每次 `_putenv_s` 覆盖写入 `MARIADB_PLUGIN_DIR`（调用方无法用环境变量
+改写）。因此部署方需把 `plugins/libmariadb` 放到**该构建期注入的路径**下；换路径须改编译期取值。
+
 **失败出口是空指针，不是异常**：调用链上适配器是在 `SimExchange` 构造函数里建的，抛出点不在
 宿主的 `try` 作用域内，异常会一路走到 `std::terminate`。而在 Windows 上那是 `abort`，它既不
 flush stdio 缓冲、也不走日志器线程的 `ThreadExit`（日志器是后台线程 + 缓冲，落盘在 `ThreadExit`），

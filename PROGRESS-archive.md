@@ -75,6 +75,59 @@
 
 ## ❓ 待讨论（已关闭 / 已了结，倒序）
 
+### Q.15 · 2026-10-06 · Release 构建树与发布前的重跑纪律
+
+- **原文（2026-10-06 审计发现）**：`out/build/x64-Release` 建于 2026-08-03（早于 `CMakePresets.json`
+  首次提交 2026-08-04）。修复前其缓存里 `CMAKE_BUILD_TYPE` 为空、`CMAKE_CXX_FLAGS*` 全空、
+  `CMAKE_INSTALL_PREFIX` 是 CMake 默认的 `C:/Program Files (x86)/DbAdapters`、
+  `CMAKE_MAKE_PROGRAM=NOTFOUND`——照它构建得到的是**没有 `/EHsc`、没有 `/O2 /DNDEBUG`** 的产物，
+  且 `UnitTests` 编不过（本机干净 Release 配置实测应得 `/DWIN32 /D_WINDOWS /EHsc` +
+  `/O2 /Ob2 /DNDEBUG`，故这是构建目录的陈旧状态，不是仓库缺陷）。审计当时已就地
+  `cmake --fresh --preset x64-Release` 重建，本机此问题消失；**待办是一条纪律**：发布前在干净树上
+  重跑一次 Release 构建 + 测试 + `cmake --install`，别沿用 `bin/Release` 里 2026-10-05 那批旧产物
+  （与本批新产物是否同源已无从判定）。另：`WSL-GCC-Release` 的缓存里 `CMAKE_INSTALL_PREFIX` 是
+  `/mnt/d/Gitee/Libs/DBAdapters/x64-linux`（preset 现值为 `DbAdapters`，仅大小写差异，DrvFs 下同一目录），
+  同属「这棵树何时配的已不清楚」；**Linux 侧的 Release 审计当时未验证**，`Install.sh` 走的就是这两棵 WSL 树。
+- **关闭（2026-10-06 用户执行）**：用户「windows 和 wsl 我都已经重新生产，并跑了测试，已经安装到了
+  `../Libs/DbAdapters`」——两平台各自在干净 preset 树上重建 Release、跑测试、执行安装，那条纪律已落到实处。
+  **Windows 侧证据**：`Libs/DbAdapters/x64-windows/bin` 下五个 Release 模块（`AsyncDbWriter.dll` /
+  `DuckdbWrapper.dll` / `MariadbWrapper.dll` / `MysqlWrapper.dll` / `SqliteWrapper.dll`）时间戳
+  2026-10-06 16:55（Debug 带 `d` 后缀的几个为同日 12:59–13:14）；`AsyncDbWriter.dll` 34304 B，
+  与审计那批干净 Release 产物同尺寸。**Linux 侧证据**：`~/.vs/Libs/DbAdapters/x64-linux/lib` 记录
+  2026-10-06 17:07–17:08（Release）与 17:00（Debug），含 `libAsyncDbWriter.so` / `libDuckdbWrapper.so` /
+  `libMariadbWrapper.so` / `libMysqlWrapper.so` / `libSqliteWrapper.so` / `libBackendLoaderStatic.a`；
+  对应构建树 `~/.vs/DbAdapters/out/build/{WSL-GCC-Debug,WSL-GCC-Release}`、
+  `~/.vs/DbAdapters/bin/Release/{UnitTests,TestDB}` 同为 17:08。**由此确立的环境口径**见主文件「备注」区
+  （WSL 侧 `../Libs` 落在 `~/.vs/Libs`，与 Windows 侧的 `D:/Gitee/Libs` 是两棵树；
+  用户口径：**安装落点跟随「真正用它的地方」**，非冗余）。
+
+### Q.14 · 2026-10-06 · MariaDB 认证插件的部署路径
+
+- **原文（2026-10-06 审计发现，未修）**：`CMakeLists.txt:100-103` 把 `MARIADB_PLUGIN_DIR` 注成
+  `${CMAKE_BINARY_DIR}/vcpkg_installed/<triplet>/[debug/]plugins/libmariadb`，即**构建机上的绝对路径**，
+  且 `MariadbWrapper::Connect()` 每次 `_putenv_s` 覆盖写入，调用方**无法**用环境变量改写（已实测：
+  `Libs/DbAdapters/x64-windows/bin/MariadbWrapper.dll` 与 `bin/Release/MariadbWrapper.dll` 里都能 grep 出
+  `D:/Gitee/DbAdapters/out/build/x64-Release/vcpkg_installed/x64-windows/plugins/libmariadb`）。
+  `bin/`、`bin/Release/`、安装树三处**都没有** `plugins` 目录，插件本体（`caching_sha2_password` /
+  `sha256_password` / `client_ed25519` 等 6 个）只存在于构建树的 `vcpkg_installed`。后果：换机器或清掉
+  `out/` 之后，用 MariaDB 后端连 MySQL 8（默认 `caching_sha2_password`）或启用 ed25519 的 MariaDB，
+  会在认证阶段报插件加载失败。**两条候选修法**：甲、`install(DIRECTORY …plugins/libmariadb…)` 随包发运 +
+  `Connect()` 改按模块自身目录（`GetModuleFileName` / `dladdr`）相对解析；乙、维持现状，把「把
+  `plugins/libmariadb` 放到该绝对路径下」写成部署义务。本批按**乙**写了变通做法（README 装载小节 +
+  `docs/backend-runtime-loading.md` §七），但**甲才是根治**；改动涉及产物布局与公开行为，
+  **需用户裁定**，未获裁定不动。
+- **关闭（2026-10-06 用户裁定）**：用户裁定「**MariaDB 不搞插件，根据实际部署需求由运维人员提供**」——
+  即**甲、乙两条都不取**，本库既不发运、也不管理认证插件（不是 PE 依赖，`applocal` 本就拷不了；
+  服务端要求哪种认证、是否用插件，只有部署环境知道，属部署方职责）。**代码零改动**
+  （`CMakeLists.txt` 的 `MARIADB_PLUGIN_DIR` 注入与 `Connect()` 的 `_putenv_s` 一律保持原样）。
+  **只改口径**：README 中英两处与 `docs/backend-runtime-loading.md` §七 由「已知限制 + 变通做法」
+  改写为「不由本库发运、也不由本库管理，由部署方按实际部署需求提供」，并保留一条部署方必须知道的
+  事实——就位位置由本库**编译期**决定（`${CMAKE_BINARY_DIR}` 展开成构建机绝对路径），
+  换路径须改编译期取值。见主文件「备注」区。
+- **为什么这么定**（供日后复查）：本库是适配器层，插件是客户端库（`libmariadb`）的运行时资产，
+  放哪、要不要放取决于部署环境的认证策略；把它做成随包发运等于替部署方猜认证方式，且要引入
+  按模块自身目录解析（`GetModuleFileName` / `dladdr`）的新机制——超出本库职责。
+
 ### Q.13 · 2026-10-05 · `~AsyncDbWriter()` 不抽干待办队列
 
 - **原文（2026-10-05 发现，未改）**：同日一并提出的另两条（`DbOperate` 无虚析构、

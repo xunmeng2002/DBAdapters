@@ -161,7 +161,7 @@ set_target_properties(doctest::doctest PROPERTIES
 set(doctest_FOUND TRUE)
 ```
 
-消费方在根 `CMakeLists.txt` 里按既有惯例声明：
+消费方在根 `CMakeLists.txt` 里按既有惯例声明（本仓写在 `BUILD_TESTS` 分支内，该分支默认开启，见下）：
 
 ```cmake
 find_package(doctest CONFIG REQUIRED PATHS "../Libs/doctest")
@@ -169,7 +169,12 @@ find_package(doctest CONFIG REQUIRED PATHS "../Libs/doctest")
 
 > **注意**：doctest 无 triplet 子目录，故这一行不进 `if(WIN32)` 分支（`find_package` 那行两个平台
 > 完全相同，不同的只是 `${sourceDir}/../Libs/` 落在哪个盘）。放好后可跑
-> `bin/Debug/UnitTests.exe`（Windows）或 `bin/Debug/UnitTests`（WSL），两者都应输出 `8 passed`。
+> `bin/Debug/UnitTests.exe`（Windows）或 `bin/Debug/UnitTests`（WSL），两者都应输出 `11 passed`。
+
+> **`BUILD_TESTS` 默认 `ON`**：本仓 `CMakeLists.txt` 的 `option(BUILD_TESTS …)` 默认开启，故上面那条
+> `find_package` 在默认配置下**就会执行**，doctest 目录是配置期的硬依赖——`test/`（`TestDB` 与
+> `UnitTests`）随常规构建一并编出。只编库、不必准备 doctest 的消费者加 `-DBUILD_TESTS=OFF` 即可
+> 跳过 `test/` 与那条 `find_package`。
 
 ---
 

@@ -165,7 +165,7 @@ set_target_properties(doctest::doctest PROPERTIES
 set(doctest_FOUND TRUE)
 ```
 
-Consumers declare it in the root `CMakeLists.txt` following the existing convention:
+Consumers declare it in the root `CMakeLists.txt` following the existing convention (in this repository it sits inside the `BUILD_TESTS` branch, see below):
 
 ```cmake
 find_package(doctest CONFIG REQUIRED PATHS "../Libs/doctest")
@@ -174,7 +174,13 @@ find_package(doctest CONFIG REQUIRED PATHS "../Libs/doctest")
 > **Note**: doctest has no triplet subdirectory, so this line does not go inside the `if(WIN32)`
 > branch (the `find_package` line is identical on both platforms; only where
 > `${sourceDir}/../Libs/` lands differs). Once placed, running `bin/Debug/UnitTests.exe`
-> (Windows) or `bin/Debug/UnitTests` (WSL) should print `8 passed`.
+> (Windows) or `bin/Debug/UnitTests` (WSL) should print `11 passed`.
+
+> **`BUILD_TESTS` defaults to `ON`**: this repository's `option(BUILD_TESTS …)` is enabled by default,
+> so the `find_package` above **does** run in a default configure and the doctest directory is a
+> configure-time hard dependency — `test/` (`TestDB` and `UnitTests`) is built along with everything
+> else. A library-only consumer that does not want to provide doctest can pass `-DBUILD_TESTS=OFF` to
+> skip `test/` and that `find_package`.
 
 ---
 

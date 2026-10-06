@@ -23,7 +23,7 @@ Created by [Fireseeker](https://fireseeker.cn/)
 | --- | --- |
 | `DB` | 抽象基类：连接管理 + 建表 / 删表 / 清表 + 单条 / 批量增删改 + 全量 / 自定义 SQL 查询 |
 | `TableSchema` | 表结构描述（表名、字段描述、主键、二级索引），驱动 SQL 自动生成 |
-| `FieldDescriptor` | 字段描述：名称、类型（Int / Int64 / Double / Char / Bool）、在记录结构体中的偏移与数组长度 |
+| `FieldDescriptor` | 字段描述：名称、类型（Int8 / UInt8 / Int16 / UInt16 / Int32 / UInt32 / Int64 / UInt64 / Double / Char / Bool 共 11 种）、在记录结构体中的偏移与数组长度 |
 | `RecordFactory` | 查询结果的记录分配与收集回调（`Allocate` / `PushBack`） |
 | `IndexDefinition` | 二级索引定义（索引 ID + 字段集合），供按索引删除使用 |
 | `SchemaRegistry` | 表 ID → `TableSchema` 的注册表，`AsyncDbWriter` 据此反查 schema |
@@ -80,6 +80,13 @@ delete backend;
 契约、两步查找次序、平台差异与已知边界的完整说明见
 [`docs/backend-runtime-loading.md`](docs/backend-runtime-loading.md)。
 
+**要发运某个后端**：把 `Libs/DbAdapters/<triplet>/bin` 下该模块（`MysqlWrapper` / `MariadbWrapper`，
+含调试后缀）连同其客户端库一起拷到引擎的模块目录。**MariaDB 的认证插件不由本库发运、也不由本库
+管理，由部署方按实际部署需求提供**：`libmariadb` 的 `caching_sha2_password` / `sha256_password` /
+`client_ed25519` 等插件不是 PE 依赖，vcpkg 的 applocal 拷不了，而 `MariadbWrapper::Connect()`
+会用它**编译期注入的绝对路径**覆盖 `MARIADB_PLUGIN_DIR`——该路径即插件应就位的位置。细节见
+[`docs/backend-runtime-loading.md`](docs/backend-runtime-loading.md) §七。
+
 ### 3. AsyncDbWriter —— 异步写库
 
 把"内存库变更"异步落盘的关键组件：
@@ -127,7 +134,8 @@ DbAdapters/
 │   ├── backend-runtime-loading.md # 后端运行时按配置装载（设计说明）
 │   ├── connection-lifecycle.md   # 连接契约与断线重连（设计说明）
 │   ├── environment-setup.md      # 环境准备指南（中文）
-│   └── environment-setup.en.md   # 环境准备指南（英文）
+│   ├── environment-setup.en.md   # 环境准备指南（英文）
+│   └── record-ownership-refactor.md # 记录归属重构（设计说明与历次台账）
 ├── submodules/                   # 子模块依赖（CMakeCommon）
 ├── bin/                          # 构建产物：动态库 / 可执行文件（按配置分目录）
 ├── lib/                          # 构建产物：导入库 / 静态库（按配置分目录）
@@ -136,7 +144,11 @@ DbAdapters/
 ├── CMakePresets.json             # CMake 预设配置（VS / 命令行）
 ├── vcpkg.json                    # vcpkg 清单（第三方驱动）
 ├── UpdateSubmodule.bat/sh        # 子模块更新脚本
+├── ConvertToUtf8Bom.py           # 源码文件转 UTF-8 BOM（工具脚本）
 ├── Install.sh                    # Linux 安装脚本（cmake --install）
+├── PROGRESS.md                   # 进度记录（跨会话状态）
+├── PROGRESS-archive.md           # 已关闭条目的原文归档
+├── .editorconfig                 # 编辑器格式约定
 ├── .gitmodules                   # Git 子模块配置
 ├── .gitignore                    # Git 忽略规则
 └── LICENSE                       # BSD-4-Clause 开源许可证
@@ -213,6 +225,11 @@ cmake --build out/build/x64-Release
 cmake --preset WSL-GCC-Release
 cmake --build out/build/WSL-GCC-Release
 ```
+
+`BUILD_TESTS` **默认 `ON`**，上面两条命令会把 `test/`（`TestDB` 与 `UnitTests`）一并编出来；配置期
+因此会执行 `find_package(doctest CONFIG REQUIRED PATHS "../Libs/doctest")`，该目录必须先就位（见
+[`docs/environment-setup.md`](docs/environment-setup.md) §1.7）。只编库、不想准备 doctest 的消费者
+加 `-DBUILD_TESTS=OFF` 即可跳过 `test/`，此时那条 `find_package` 不会执行。
 
 编译完成后，库文件输出至 `lib/<Config>`（Release 对应 `lib/Release`），可执行文件输出至 `bin/<Config>`（如 `bin/Release/TestDB.exe`）。Windows 下 vcpkg 的 applocal 机制会把 `sqlite3.dll`、`mysqlcppconnx-*.dll`、`mariadbcpp.dll`、`duckdb.dll` 等运行时 DLL 自动拷贝到可执行文件旁。
 
@@ -488,6 +505,12 @@ int main()
 | `TestMariadb` | MariaDB 全流程 CRUD（需本机 MariaDB，默认注释关闭） |
 | `TestDuckdbVectorized` | 向量化读取：类型转换、NULL 哨兵、错误透出 |
 | `TestDuckdbVectorizedMultiChunk` | 多 chunk 回退路径：BIGINT→Char、DOUBLE→Int64 跨 chunk 行索引正确性 |
+| `TestSqliteNarrowInteger` | 窄整数读回：无符号列与 NULL 哨兵（SQLite 的 8 字节整数是二补数、无无符号列，绑定侧饱和到 `INT64_MAX`） |
+| `TestSqliteNarrowSaturation` | 读侧收窄饱和：宽列塞入超范围值，期望 6 格各自饱和并汇总一条 Warning |
+| `TestDuckdbNarrowInteger` | 同 SQLite 那条，另覆盖 DuckDB 专有的向量化 chunk 读取路径 |
+| `TestDuckdbNarrowSaturation` | 读侧收窄饱和（DuckDB，走向量化读取路径） |
+| `TestDuckdbNarrowColumnTypes` | DuckDB 窄列类型映射：各整数列宽与 NULL 哨兵 |
+| `TestFailureVisibility` | 失败可见性：刻意打在不存在的库/表上，断言日志出现对应 ERROR 行（该段 ERROR 属预期输出） |
 | `TestBackendLoader` | 运行时装载：按种类的常路入口装载成功的后端返回可用对象；构造失败的后端返回可读原因而非让异常穿过 C 边界；另有一条按基名的低层入口覆盖"模块根本不存在"，文案须含两条候选路径。失败会反映到进程退出码 |
 | `TestAsyncWriterRecordOwnership` | 记录归属的端到端烟雾：真 sqlite + 真写线程，`AdoptRecord` 移交一条记录后断言行确实落库、且归还恰好一次。语义细节（借用、移动、批、异常、断开）见下节单元测试。失败会反映到进程退出码 |
 | `TestReconnect` | 断线重连语义：`Connect → DisConnect → Connect` 之后建表、写入、读回一行，断言真读到该行（SQLite 与 DuckDB 各一次）。只看 `Connect` 的返回值不足以判定——断连后 `Exec` 的失败是静默的。失败会反映到进程退出码 |
@@ -510,7 +533,7 @@ int main()
 
 | 测试套件 | 用例 |
 | :--- | :--- |
-| `RecordHandle` | 移动后源不再归还；移动赋值先归还旧记录；容器扩容不重复归还 |
+| `RecordHandle` | 移动后源不再归还；移动赋值先归还旧记录；容器扩容不重复归还；空记录不调用归还回调 |
 | `RecordOwnership` | 借用不归还；移交恰好归还一次；批元素逐个恰好归还一次；执行抛异常仍恰好归还一次；断开丢弃待办时恰好归还一次；析构抽干待办队列并归还记录；断连后写线程自行重连 |
 
 ```bash
