@@ -1,5 +1,6 @@
 #pragma once
-#include <DbAdapters/DbInterface/DbOperate.h>
+#include "DbOperate.h"
+
 #include <utility>
 #include <vector>
 
@@ -9,6 +10,8 @@ namespace DbAdapters
 class DbOperateImpl : public DbOperate
 {
 public:
+    static DbOperateImpl* Allocate();
+
     virtual void Deallocate() override;
 
     const std::vector<RecordHandle>& GetBatchRecords() const { return batchRecords_; }

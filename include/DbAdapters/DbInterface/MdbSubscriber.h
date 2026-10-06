@@ -1,6 +1,6 @@
 #pragma once
-#include <DbAdapters/DbInterface/DbOperate.h>
 #include <DbAdapters/DbInterface/RecordHandle.h>
+#include <Spark/Types.h>
 #include <atomic>
 #include <vector>
 

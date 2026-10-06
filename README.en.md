@@ -265,9 +265,9 @@ Seven targets are exported: `DbInterface` (the interface target), the four wrapp
 
 **The consumer must provide Spark itself.** The very first line of `DbAdaptersConfig.cmake` is
 `find_dependency(Spark CONFIG)`, so `Spark` has to be locatable at configure time (`Spark_DIR` or
-`CMAKE_PREFIX_PATH`). On top of that, every public header except the four wrappers includes Spark
-directly: `AsyncDbWriter.h` pulls `<Spark/Core/Core.h>` and `<Spark/TemplateLib/TemplateLib.h>`,
-`DbOperate.h` and `DbBackendLoader.h` pull `<Spark/Types.h>`, and `FailureLogThrottle.h` pulls
+`CMAKE_PREFIX_PATH`). On top of that, these public headers also include Spark directly:
+`AsyncDbWriter.h` pulls `<Spark/Core/Core.h>` and `<Spark/TemplateLib/TemplateLib.h>`,
+`DbBackendLoader.h` and `MdbSubscriber.h` pull `<Spark/Types.h>`, and `FailureLogThrottle.h` pulls
 `<Spark/Core/Logger/Logger.h>`. In the export set Spark appears only as
 `$<LINK_ONLY:Spark::Core>` on `BackendLoaderStatic` — that governs the link line and **does not
 propagate include directories**. So a consumer using any of those headers has to wire it up once:

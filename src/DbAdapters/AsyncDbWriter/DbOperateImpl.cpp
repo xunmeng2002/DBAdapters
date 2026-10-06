@@ -1,11 +1,12 @@
 #include "DbOperateImpl.h"
+
 #include <Spark/TemplateLib/TemplateLib.h>
 
 using namespace Spark;
 
 namespace DbAdapters
 {
-DbOperate* DbOperate::Allocate()
+DbOperateImpl* DbOperateImpl::Allocate()
 {
 	return ObjectPool<DbOperateImpl>::GetInstance().Allocate();
 }

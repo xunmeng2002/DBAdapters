@@ -16,6 +16,8 @@
 
 namespace DbAdapters
 {
+class DbOperate;
+
 class ASYNCDBWRITER_EXPORTS AsyncDbWriter : public Spark::Core::ThreadBase, public MdbSubscriber
 {
 public:

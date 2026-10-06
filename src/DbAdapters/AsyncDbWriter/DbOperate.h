@@ -9,9 +9,7 @@ class DbOperate
 public:
 	virtual ~DbOperate() = default;
 
-	static DbOperate* Allocate();
 	virtual void Deallocate() = 0;
-
 
 	DbOperateType Operate;
 	unsigned int TableId;

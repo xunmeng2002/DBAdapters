@@ -281,7 +281,7 @@ void AsyncDbWriter::AddDbOperate(DbOperate* dbOperate)
 
 DbOperate* AsyncDbWriter::CreateDbOperate(DbOperateType operate, unsigned int tableId, RecordHandle record, unsigned int indexId)
 {
-	DbOperate* dbOperate = DbOperate::Allocate();
+	DbOperate* dbOperate = DbOperateImpl::Allocate();
 	dbOperate->Operate = operate;
 	dbOperate->TableId = tableId;
 	dbOperate->IndexId = indexId;

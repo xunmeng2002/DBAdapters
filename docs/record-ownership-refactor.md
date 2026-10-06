@@ -180,7 +180,7 @@ virtual void OnRecordEraseByIndex(unsigned int tableID, unsigned int indexId, Re
 virtual void OnRecordUpdate(unsigned int tableID, RecordHandle record) {}
 // OnRecordTruncate / OnTableOp 无记录，签名不变
 
-// include/DbAdapters/DbInterface/DbOperate.h
+// src/DbAdapters/AsyncDbWriter/DbOperate.h（当时为 include/DbAdapters/DbInterface/DbOperate.h，2026-10-06 迁入模块内部）
 RecordHandle Record;      // 原 void* Record
 // virtual void DeallocateRecord() = 0;   ← 删除（决策 1）
 
@@ -220,7 +220,7 @@ void SetBatchRecords(std::vector<RecordHandle> records);                  // 故
 | 文件 | 改动 |
 | :--- | :--- |
 | `include/DbAdapters/DbInterface/RecordHandle.h` | 新增 §4.1 |
-| `include/DbAdapters/DbInterface/DbOperate.h` | `void* Record` → `RecordHandle Record`；删 `DeallocateRecord()` |
+| `include/DbAdapters/DbInterface/DbOperate.h` | `void* Record` → `RecordHandle Record`；删 `DeallocateRecord()`；该头已于 2026-10-06 迁至 `src/DbAdapters/AsyncDbWriter/DbOperate.h`（只在本模块内使用） |
 | `include/DbAdapters/DbInterface/MdbSubscriber.h` | 5 个记录类回调签名（§4.3） |
 | `include/DbAdapters/DbInterface/Schema.h:55` | 删 `DeallocateRecord` 字段（后续字段同步前移） |
 | `include/DbAdapters/AsyncDbWriter/AsyncDbWriter.h` | 5 个 override 签名同步；删私有 `AllocateDbOperate()`，加私有 `EnqueueDbOperate(...)` |
