@@ -1,15 +1,18 @@
 #include "MdbStructs.h"
 #include "RecordOwnershipTestSupport.h"
-#include <DbAdapters/SqliteWrapper/SqliteWrapper.h>
-#include <DbAdapters/DuckdbWrapper/DuckdbWrapper.h>
-#include <DbAdapters/MysqlWrapper/MysqlWrapper.h>
-#include <DbAdapters/MariadbWrapper/MariadbWrapper.h>
+
+#include <DbAdapters/AsyncDbWriter/AsyncDbWriter.h>
 #include <DbAdapters/BackendLoader/DbBackendLoader.h>
-#include <DbAdapters/DbInterface/TypedTable.h>
 #include <DbAdapters/DbInterface/RecordHandle.h>
 #include <DbAdapters/DbInterface/SchemaRegistry.h>
-#include <DbAdapters/AsyncDbWriter/AsyncDbWriter.h>
+#include <DbAdapters/DbInterface/TypedTable.h>
+#include <DbAdapters/DuckdbWrapper/DuckdbWrapper.h>
+#include <DbAdapters/MariadbWrapper/MariadbWrapper.h>
+#include <DbAdapters/MysqlWrapper/MysqlWrapper.h>
+#include <DbAdapters/SqliteWrapper/SqliteWrapper.h>
+
 #include <Spark/Core/Core.h>
+
 #include <atomic>
 #include <cstdio>
 #include <cstring>
@@ -18,7 +21,6 @@
 #include <limits>
 #include <utility>
 #include <vector>
-
 
 using namespace std;
 using namespace Mdb;
@@ -206,6 +208,43 @@ static void TestMariadb()
     MariadbWrapper* mariadb = new MariadbWrapper(mariadbHost, mariadbUser, mariadbPassword);
     WriteLog(LogLevel::Info, "TestDb with Mariadb");
     TestDb(mariadb);
+}
+
+// ===================== 断线重连测试 =====================
+
+// Connect 是"确保本连接可用"的幂等动作：DisConnect 之后必须能重建连接，而不只是报告"句柄为空"。
+// 断言须落到真实读写上——重连后建表、写入、读回一行；只看 Connect 的返回值不足以判定，
+// 因为断连后 Exec 的失败是静默的（仅记日志），Connect 恒真也能让本用例"通过"。
+static bool TestReconnect(Db& db, const char* backendName)
+{
+	const TableSchema* probeSchema = &OwnershipProbeRecord::GetSchema();
+	const bool firstConnectSucceeded = db.Connect();
+	db.DisConnect();
+	const bool reconnectSucceeded = db.Connect();
+
+	bool rowReadBack = false;
+	if (reconnectSucceeded)
+	{
+		db.CreateTables(&probeSchema, 1);
+		db.TruncateTables(&probeSchema, 1);
+		TypedTable<OwnershipProbeRecord> probeTable(&db);
+		OwnershipProbeRecord probeRecord;
+		probeRecord.PK = 7;
+		probeTable.Insert(probeRecord);
+		std::vector<OwnershipProbeRecord*> probeRows;
+		probeTable.SelectAll(probeRows);
+		rowReadBack = probeRows.size() == 1u && probeRows.front()->PK == 7;
+		for (OwnershipProbeRecord* probeRow : probeRows)
+		{
+			probeRow->Deallocate();
+		}
+		db.DropTables(&probeSchema, 1);
+	}
+	const bool passed = firstConnectSucceeded && reconnectSucceeded && rowReadBack;
+	WriteLog(passed ? LogLevel::Info : LogLevel::Error,
+		"TestReconnect %s: firstConnect=%d reconnect=%d rowReadBack=%d",
+		backendName, firstConnectSucceeded ? 1 : 0, reconnectSucceeded ? 1 : 0, rowReadBack ? 1 : 0);
+	return passed;
 }
 
 // ===================== SelectWithSqlVectorized 测试 =====================
@@ -1055,6 +1094,10 @@ int main(int argc, char* argv[])
     TestDuckdbNarrowSaturation();
     TestDuckdbNarrowColumnTypes();
     TestFailureVisibility();
+    SqliteWrapper reconnectSqlite(sqliteDbName);
+    DuckdbWrapper reconnectDuckdb(duckdbDbName);
+    const bool sqliteReconnectPassed = TestReconnect(reconnectSqlite, "Sqlite");
+    const bool duckdbReconnectPassed = TestReconnect(reconnectDuckdb, "Duckdb");
     const bool backendLoaderPassed = TestBackendLoader();
     const bool asyncWriterOwnershipPassed = TestAsyncWriterRecordOwnership();
     //TestMysql();
@@ -1062,5 +1105,5 @@ int main(int argc, char* argv[])
 
 	Logger::GetInstance().Stop();
 	Logger::GetInstance().Join();
-	return backendLoaderPassed && asyncWriterOwnershipPassed ? 0 : 1;
+	return backendLoaderPassed && asyncWriterOwnershipPassed && sqliteReconnectPassed && duckdbReconnectPassed ? 0 : 1;
 }

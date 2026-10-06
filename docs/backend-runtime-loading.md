@@ -45,10 +45,14 @@ extern "C" MYSQLWRAPPER_EXPORTS DbAdapters::Db* DbAdapters_CreateBackend(const c
 
 ### 异常绝不跨 C ABI
 
-`MysqlWrapper` 与 `MariadbWrapper` 的构造函数在连不上时是 **`throw`** 的。让 C++ 异常穿过
-`extern "C"` 边界是**未定义行为**。故工厂一律经 `CreateBackendOrReportFailure` 收住异常，
-把 `what()` 写进调用方的缓冲并返回 `nullptr`；调用方据此报一条可读的错，而不是看进程当场终止。
-这是必须的，不是风格问题。
+`MysqlWrapper` 的构造函数**即建连**（`mysqlx::Session` 构造成功与否就是连接成功与否），失败时
+**`throw`**；`MariadbWrapper` 的构造函数抛的则是**驱动装载失败**（客户端动态库缺失），与「连不上」
+是两回事——后者表现为 `Connect()` 返回 `false`。让 C++ 异常穿过 `extern "C"` 边界是**未定义行为**。
+故工厂一律经 `CreateBackendOrReportFailure` 收住异常，把 `what()` 写进调用方的缓冲并返回 `nullptr`；
+调用方据此报一条可读的错，而不是看进程当场终止。这是必须的，不是风格问题。
+
+> 连接语义（`Connect()` 是幂等动作、断开后必须能重建）与四个后端的失败通道差异见
+> [`docs/connection-lifecycle.md`](connection-lifecycle.md)。
 
 `test/TestDB` 的 `TestBackendLoader` 就是这条约束的可执行证据。
 

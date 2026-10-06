@@ -228,35 +228,66 @@ struct MysqlWrapper::Impl
 MysqlWrapper::MysqlWrapper(const std::string& host)
     : impl_(nullptr), host_(host)
 {
-    // Session 构造即建连，失败抛异常；记录后继续抛出，保持调用方原有的失败感知（本 wrapper 的 Connect 不建连）
-    try
-    {
-        impl_ = std::make_unique<Impl>(mysqlx::Session(host));
-    }
-    catch (const std::exception& e)
-    {
-        WriteLog(LogLevel::Error, "MysqlWrapper: Connect failed. Host:%s, Message:%s", host.c_str(), e.what());
-        throw;
-    }
+    OpenSessionOrThrow();
 }
 MysqlWrapper::~MysqlWrapper()
 {
     DisConnect();
 }
 
+void MysqlWrapper::OpenSessionOrThrow()
+{
+    // Session 构造即建连，失败抛异常；记录后继续抛出，保持调用方原有的失败感知
+    try
+    {
+        impl_ = std::make_unique<Impl>(mysqlx::Session(host_));
+    }
+    catch (const std::exception& e)
+    {
+        WriteLog(LogLevel::Error, "MysqlWrapper: Connect failed. Host:%s, Message:%s", host_.c_str(), e.what());
+        throw;
+    }
+}
 bool MysqlWrapper::Connect()
 {
-    return impl_ != nullptr;
+    if (impl_ != nullptr)
+    {
+        return true;
+    }
+    try
+    {
+        OpenSessionOrThrow();
+    }
+    catch (const std::exception&)
+    {
+        return false;
+    }
+    return true;
 }
 void MysqlWrapper::DisConnect()
 {
     if (impl_)
     {
         impl_->session.close();
+        impl_.reset();
     }
+}
+
+bool MysqlWrapper::CheckSessionOpen(const char* operationName) const
+{
+    if (impl_ != nullptr)
+    {
+        return true;
+    }
+    WriteLog(LogLevel::Error, "MysqlWrapper: %s skipped, session is not open.", operationName);
+    return false;
 }
 void MysqlWrapper::Exec(const char* sql)
 {
+    if (!CheckSessionOpen("EXEC"))
+    {
+        return;
+    }
     impl_->session.sql(sql).execute();
 }
 
@@ -297,6 +328,10 @@ void MysqlWrapper::TruncateTables(const TableSchema* const* schemas, int count)
 
 void MysqlWrapper::Insert(const TableSchema* schema, const void* record)
 {
+    if (!CheckSessionOpen("INSERT"))
+    {
+        return;
+    }
     std::string sql = MakeInsertSql(schema);
     std::vector<mysqlx::Value> params;
     params.reserve(schema->fieldCount);
@@ -306,6 +341,10 @@ void MysqlWrapper::Insert(const TableSchema* schema, const void* record)
 }
 void MysqlWrapper::BatchInsert(const TableSchema* schema, const void* const* records, int count)
 {
+    if (!CheckSessionOpen("BATCH INSERT"))
+    {
+        return;
+    }
     Exec("START TRANSACTION;");
     for (int i = 0; i < count; ++i)
         Insert(schema, records[i]);
@@ -313,6 +352,10 @@ void MysqlWrapper::BatchInsert(const TableSchema* schema, const void* const* rec
 }
 void MysqlWrapper::Update(const TableSchema* schema, const void* record)
 {
+    if (!CheckSessionOpen("UPDATE"))
+    {
+        return;
+    }
     std::string sql = MakeUpdateSql(schema);
     std::vector<mysqlx::Value> params;
     params.reserve(schema->fieldCount + schema->primaryKeyCount);
@@ -327,6 +370,10 @@ void MysqlWrapper::Update(const TableSchema* schema, const void* record)
 }
 void MysqlWrapper::Delete(const TableSchema* schema, const void* record, const int* keyFieldIndices, int keyFieldCount)
 {
+    if (!CheckSessionOpen("DELETE"))
+    {
+        return;
+    }
     std::string sql = MakeDeleteSql(schema, keyFieldIndices, keyFieldCount);
     std::vector<mysqlx::Value> params;
     params.reserve(keyFieldCount);
@@ -336,6 +383,10 @@ void MysqlWrapper::Delete(const TableSchema* schema, const void* record, const i
 }
 void MysqlWrapper::SelectAll(const TableSchema* schema, void* recordsList, const RecordFactory& factory)
 {
+    if (!CheckSessionOpen("SELECT"))
+    {
+        return;
+    }
     std::string sql = "SELECT * FROM `";
     sql += schema->tableName;
     sql += "`;";
@@ -345,6 +396,10 @@ void MysqlWrapper::SelectAll(const TableSchema* schema, void* recordsList, const
 }
 void MysqlWrapper::SelectWithSql(const char* sql, const TableSchema* schema, void* recordsList, const RecordFactory& factory)
 {
+    if (!CheckSessionOpen("SELECT"))
+    {
+        return;
+    }
     auto result = impl_->session.sql(sql).execute();
     ReadResultRows(result, schema, recordsList, factory);
 }

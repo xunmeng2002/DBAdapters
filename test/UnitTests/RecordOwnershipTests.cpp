@@ -106,4 +106,25 @@ TEST_CASE("断开丢弃待办时恰好归还一次")
     harness.Writer().DisConnect();
     CHECK(WaitUntil([&] { return releaseCount.load() == 2; }, 3000));
 }
+
+TEST_CASE("析构抽干待办队列并归还记录")
+{
+    std::atomic<int> releaseCount{ 0 };
+    {
+        WriterHarness harness(false);
+        harness.Writer().OnRecordInsert(0, AdoptRecord(AllocateProbeRecord(releaseCount, 33)));
+        CHECK(releaseCount.load() == 0);
+    }
+    CHECK(releaseCount.load() == 1);
+}
+
+TEST_CASE("断连后写线程自行重连")
+{
+    WriterHarness harness;
+    REQUIRE(WaitUntil([&] { return harness.Recorder().connectCount.load() >= 1; }, 3000));
+    const int connectCountBeforeDisconnect = harness.Recorder().connectCount.load();
+    harness.Writer().DisConnect();
+    CHECK(harness.Recorder().disconnectCount.load() >= 1);
+    CHECK(WaitUntil([&] { return harness.Recorder().connectCount.load() > connectCountBeforeDisconnect; }, 3000));
+}
 }

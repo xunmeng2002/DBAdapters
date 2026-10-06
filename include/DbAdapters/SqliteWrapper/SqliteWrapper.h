@@ -35,6 +35,8 @@ public:
 
 private:
 	struct Impl;
+	void OpenOrReportFailure();
+
 	std::unique_ptr<Impl> impl_;
 };
 }

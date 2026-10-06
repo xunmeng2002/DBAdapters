@@ -35,6 +35,9 @@ public:
 
 private:
     struct Impl;
+    void OpenSessionOrThrow();
+    bool CheckSessionOpen(const char* operationName) const;
+
     std::unique_ptr<Impl> impl_;
     std::string host_;
 };

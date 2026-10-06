@@ -44,6 +44,15 @@ Created by [Fireseeker](https://fireseeker.cn/)
 
 > MySQL 适配器使用 **X DevAPI**（`mysqlx://` 协议，需服务端开启 X Plugin，默认端口 33060）；MariaDB 适配器使用经典 `tcp://` 协议（默认端口 3306）。
 
+`Connect()` 是**幂等动作**——语义为「确保本连接可用并返回是否可用」：已连接时不重开，被
+`DisConnect()` 关掉后**重建**。`DisConnect()` 会把内部句柄置空，两者互为前提。契约细节、四个
+适配器在失败通道上的差异、以及断线重连与全量 resync 的设计见
+[`docs/connection-lifecycle.md`](docs/connection-lifecycle.md)。
+
+连接关闭后继续调用任一操作接口**不会崩**：四个适配器的每个入口都有空守卫，命中时记一条错误
+日志并跳过（`MysqlWrapper: EXEC skipped, session is not open.` 之类），返回 `void` 的接口不做
+额外的失败上报。
+
 #### 运行时按配置装载（让某个后端可以不随包发运）
 
 四个适配器若全部被链接，它们连同各自的客户端库会在**进程加载那一刻**就全部进地址空间 ——
@@ -78,7 +87,8 @@ delete backend;
 - 继承 `Spark::Core::ThreadBase`，后台线程循环消费操作队列
 - 实现 `MdbSubscriber`，将内存库的 `OnRecordInsert / OnRecordBatchInsert / OnRecordErase / ...` 事件封装为 `DbOperate` 投递入队
 - 建表 / 删表 / 清表以批操作下发，插入支持事务批量（BatchInsert）
-- 断线自动重连，异常操作记录日志并短暂休眠后重试
+- 断线自动重连，异常操作记录日志并短暂休眠后重试；重连成功后由订阅方全量 resync 补齐断开期间的
+  内存表状态（SQLite / DuckDB 的写失败就地记日志、不抛异常，故只有 MySQL / MariaDB 会走到重连）
 - `DbOperate` 走对象池复用，减少高频写库时的内存分配
 
 ### 4. 典型场景
@@ -115,6 +125,7 @@ DbAdapters/
 │   └── CMakeLists.txt
 ├── docs/                         # 文档
 │   ├── backend-runtime-loading.md # 后端运行时按配置装载（设计说明）
+│   ├── connection-lifecycle.md   # 连接契约与断线重连（设计说明）
 │   ├── environment-setup.md      # 环境准备指南（中文）
 │   └── environment-setup.en.md   # 环境准备指南（英文）
 ├── submodules/                   # 子模块依赖（CMakeCommon）
@@ -463,7 +474,7 @@ int main()
 }
 ```
 
-> **记录所有权约定**：归还方式随记录句柄（`RecordHandle`）一起移交，不再按操作类型推断。生产方在移交点声明：`AdoptRecord(record)` 表示此后由写侧归还；`BorrowRecord(record)` 表示只借用指针、归还仍归自己（内存表同时持有同一条记录时用后者，否则写侧释放会让内存表里的活记录变成悬空指针）。`Insert` 与 `BatchInsert` 同属后者：表直接持有调用方交来的记录，写侧只借不还，故批与单次的归属语义完全一致，批插入也不必再为每条记录多造一份副本。**代价是借用期间调用方不得改写或释放该记录**——`Update` 会覆写它的字节、`Erase` 与 `TruncateTable` 会把它归还给对象池，而写线程此刻可能正在读它；凡是这批记录写出去之前就要改表，先 `Stop()` / `Join()` 写线程。
+> **记录所有权约定**：归还方式随记录句柄（`RecordHandle`）一起移交，不再按操作类型推断。生产方在移交点声明：`AdoptRecord(record)` 表示此后由写侧归还；`BorrowRecord(record)` 表示只借用指针、归还仍归自己（内存表同时持有同一条记录时用后者，否则写侧释放会让内存表里的活记录变成悬空指针）。`Insert` 与 `BatchInsert` 同属后者：表直接持有调用方交来的记录，写侧只借不还，故批与单次的归属语义完全一致，批插入也不必再为每条记录多造一份副本。**代价是借用期间调用方不得改写或释放该记录**——`Update` 会覆写它的字节、`Erase` 与 `TruncateTable` 会把它归还给对象池，而写线程此刻可能正在读它；凡是这批记录写出去之前就要改表，先 `Stop()` / `Join()` 写线程。**`BatchInsert` 不查重，这一条是调用方义务**：批量插入要求这批记录内部无重复键、且其主键与唯一键均不与表中已有记录冲突。该前提成立时逐条零额外开销；Release 下**不成立时不会有任何日志或失败**——重复的那条既不在索引里（`TruncateTable` 不会归还它，池槽位泄漏），又照样被写进数据库（内存表与库静默分叉）；**Debug 下则不静默**——`PrimaryKey` 与各唯一键的 `Insert` 返回值被就地 `assert`，违反契约会立刻中断进程（断言只覆盖这两类索引；二级索引是 `std::multiset`，重复键本就合法）。单条 `Insert` 则有预检：失败返回 `false` 并释放该记录。
 
 ## 七、集成测试
 
@@ -479,6 +490,7 @@ int main()
 | `TestDuckdbVectorizedMultiChunk` | 多 chunk 回退路径：BIGINT→Char、DOUBLE→Int64 跨 chunk 行索引正确性 |
 | `TestBackendLoader` | 运行时装载：按种类的常路入口装载成功的后端返回可用对象；构造失败的后端返回可读原因而非让异常穿过 C 边界；另有一条按基名的低层入口覆盖"模块根本不存在"，文案须含两条候选路径。失败会反映到进程退出码 |
 | `TestAsyncWriterRecordOwnership` | 记录归属的端到端烟雾：真 sqlite + 真写线程，`AdoptRecord` 移交一条记录后断言行确实落库、且归还恰好一次。语义细节（借用、移动、批、异常、断开）见下节单元测试。失败会反映到进程退出码 |
+| `TestReconnect` | 断线重连语义：`Connect → DisConnect → Connect` 之后建表、写入、读回一行，断言真读到该行（SQLite 与 DuckDB 各一次）。只看 `Connect` 的返回值不足以判定——断连后 `Exec` 的失败是静默的。失败会反映到进程退出码 |
 
 ### 运行测试
 
@@ -499,7 +511,7 @@ int main()
 | 测试套件 | 用例 |
 | :--- | :--- |
 | `RecordHandle` | 移动后源不再归还；移动赋值先归还旧记录；容器扩容不重复归还 |
-| `RecordOwnership` | 借用不归还；移交恰好归还一次；批元素逐个恰好归还一次；执行抛异常仍恰好归还一次；断开丢弃待办时恰好归还一次 |
+| `RecordOwnership` | 借用不归还；移交恰好归还一次；批元素逐个恰好归还一次；执行抛异常仍恰好归还一次；断开丢弃待办时恰好归还一次；析构抽干待办队列并归还记录；断连后写线程自行重连 |
 
 ```bash
 # Windows

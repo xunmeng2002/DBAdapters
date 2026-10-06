@@ -31,11 +31,10 @@ AsyncDbWriter::AsyncDbWriter(Db* db, SchemaRegistry* schemaRegistry)
 }
 AsyncDbWriter::~AsyncDbWriter()
 {
-	if (db_ != nullptr)
-	{
-		delete db_;
-		db_ = nullptr;
-	}
+	Stop();
+	Join();
+	DropPendingOperates("Destructor");
+	delete db_;
 }
 void AsyncDbWriter::Subscribe(DbSubscriber* dbSubscriber)
 {
@@ -49,15 +48,9 @@ bool AsyncDbWriter::Connect()
 {
 	try
 	{
-		if (db_->Connect())
+		if (!db_->Connect())
 		{
-			connected_ = true;
-			WriteLog(LogLevel::Info, "AsyncDbWriter: Db connected.");
-			if (dbSubscriber_ != nullptr)
-			{
-				dbSubscriber_->OnDbConnected();
-			}
-			return true;
+			return false;
 		}
 	}
 	catch (const std::exception& e)
@@ -66,7 +59,20 @@ bool AsyncDbWriter::Connect()
 		WriteLog(LogLevel::Error, "AsyncDbWriter: Connect throw. Message:%s", e.what());
 		return false;
 	}
-	return false;
+	connected_ = true;
+	WriteLog(LogLevel::Info, "AsyncDbWriter: Db connected.");
+	if (dbSubscriber_ != nullptr)
+	{
+		try
+		{
+			dbSubscriber_->OnDbConnected();
+		}
+		catch (const std::exception& e)
+		{
+			WriteLog(LogLevel::Error, "AsyncDbWriter: OnDbConnected throw. Message:%s", e.what());
+		}
+	}
+	return true;
 }
 void AsyncDbWriter::DisConnect()
 {
@@ -82,7 +88,7 @@ void AsyncDbWriter::DisConnect()
 			WriteLog(LogLevel::Error, "AsyncDbWriter: OnDbDisConnected throw. Message:%s", e.what());
 		}
 	}
-	DropPendingOperates();
+	DropPendingOperates("DisConnect");
 	try
 	{
 		db_->DisConnect();
@@ -92,7 +98,7 @@ void AsyncDbWriter::DisConnect()
 		WriteLog(LogLevel::Error, "AsyncDbWriter: Db DisConnect throw. Message:%s", e.what());
 	}
 }
-void AsyncDbWriter::DropPendingOperates()
+void AsyncDbWriter::DropPendingOperates(const char* triggerReason)
 {
 	list<DbOperate*> droppedOperates;
 	{
@@ -107,7 +113,7 @@ void AsyncDbWriter::DropPendingOperates()
 	if (droppedCount > 0)
 	{
 		// 这里会连同队列一起丢弃，不记录的话丢数据只能从"库里的行数比预期少"反推
-		WriteLog(LogLevel::Warning, "AsyncDbWriter: DisConnect discarded %d pending operations.", (int)droppedCount);
+		WriteLog(LogLevel::Warning, "AsyncDbWriter: %s discarded %d pending operations.", triggerReason, (int)droppedCount);
 	}
 }
 

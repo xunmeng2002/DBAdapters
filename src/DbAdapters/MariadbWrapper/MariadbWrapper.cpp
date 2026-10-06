@@ -289,6 +289,10 @@ MariadbWrapper::~MariadbWrapper()
 
 bool MariadbWrapper::Connect()
 {
+    if (impl_->m_DBConnection != nullptr)
+    {
+        return true;
+    }
 #ifdef _WIN32
     _putenv_s("MARIADB_PLUGIN_DIR", MARIADB_PLUGIN_DIR);
 #endif
@@ -311,8 +315,22 @@ void MariadbWrapper::DisConnect()
     impl_->DisConnect();
 }
 
+bool MariadbWrapper::CheckConnectionOpen(const char* operationName) const
+{
+    if (impl_->m_DBConnection != nullptr)
+    {
+        return true;
+    }
+    WriteLog(LogLevel::Error, "MariadbWrapper: %s skipped, connection is not open.", operationName);
+    return false;
+}
+
 void MariadbWrapper::Exec(const char* sql)
 {
+    if (!CheckConnectionOpen("EXEC"))
+    {
+        return;
+    }
     if (!impl_->m_Statement)
     {
         impl_->m_Statement.reset(impl_->m_DBConnection->createStatement());
@@ -361,6 +379,10 @@ void MariadbWrapper::TruncateTables(const TableSchema* const* schemas, int count
 
 void MariadbWrapper::Insert(const TableSchema* schema, const void* record)
 {
+    if (!CheckConnectionOpen("INSERT"))
+    {
+        return;
+    }
     std::string sql = MakeInsertSql(schema);
     auto pstmt = std::unique_ptr<sql::PreparedStatement, SqlPreparedStatementDeleter>(impl_->m_DBConnection->prepareStatement(sql));
     for (int i = 0; i < schema->fieldCount; ++i)
@@ -370,6 +392,10 @@ void MariadbWrapper::Insert(const TableSchema* schema, const void* record)
 
 void MariadbWrapper::BatchInsert(const TableSchema* schema, const void* const* records, int count)
 {
+    if (!CheckConnectionOpen("BATCH INSERT"))
+    {
+        return;
+    }
     Exec("START TRANSACTION;");
     for (int i = 0; i < count; ++i)
         Insert(schema, records[i]);
@@ -378,6 +404,10 @@ void MariadbWrapper::BatchInsert(const TableSchema* schema, const void* const* r
 
 void MariadbWrapper::Update(const TableSchema* schema, const void* record)
 {
+    if (!CheckConnectionOpen("UPDATE"))
+    {
+        return;
+    }
     std::string sql = MakeUpdateSql(schema);
     auto pstmt = std::unique_ptr<sql::PreparedStatement, SqlPreparedStatementDeleter>(impl_->m_DBConnection->prepareStatement(sql));
     int paramIndex = 1;
@@ -393,6 +423,10 @@ void MariadbWrapper::Update(const TableSchema* schema, const void* record)
 
 void MariadbWrapper::Delete(const TableSchema* schema, const void* record, const int* keyFieldIndices, int keyFieldCount)
 {
+    if (!CheckConnectionOpen("DELETE"))
+    {
+        return;
+    }
     std::string sql = MakeDeleteSql(schema, keyFieldIndices, keyFieldCount);
     auto pstmt = std::unique_ptr<sql::PreparedStatement, SqlPreparedStatementDeleter>(impl_->m_DBConnection->prepareStatement(sql));
     for (int i = 0; i < keyFieldCount; ++i)
@@ -401,6 +435,10 @@ void MariadbWrapper::Delete(const TableSchema* schema, const void* record, const
 }
 void MariadbWrapper::SelectAll(const TableSchema* schema, void* recordsList, const RecordFactory& factory)
 {
+    if (!CheckConnectionOpen("SELECT"))
+    {
+        return;
+    }
     std::string sql = "SELECT * FROM `";
     sql += schema->tableName;
     sql += "`;";
@@ -414,6 +452,10 @@ void MariadbWrapper::SelectAll(const TableSchema* schema, void* recordsList, con
 }
 void MariadbWrapper::SelectWithSql(const char* sql, const TableSchema* schema, void* recordsList, const RecordFactory& factory)
 {
+    if (!CheckConnectionOpen("SELECT"))
+    {
+        return;
+    }
     if (!impl_->m_Statement)
     {
         impl_->m_Statement.reset(impl_->m_DBConnection->createStatement());

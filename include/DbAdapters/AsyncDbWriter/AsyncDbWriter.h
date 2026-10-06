@@ -48,7 +48,7 @@ private:
 	DbOperate* CreateDbOperate(DbOperateType operate, unsigned int tableId, RecordHandle record = RecordHandle(), unsigned int indexId = 0);
 	void EnqueueDbOperate(DbOperateType operate, unsigned int tableId, RecordHandle record = RecordHandle(), unsigned int indexId = 0);
 	int PendingOperateCount();
-	void DropPendingOperates();
+	void DropPendingOperates(const char* triggerReason);
 
 	void ExecuteDbOperate(DbOperate* dbOperate);
 	void CreateTables(DbOperate* dbOperate);

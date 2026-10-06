@@ -35,6 +35,8 @@ public:
 
 private:
     struct Impl;
+    bool CheckConnectionOpen(const char* operationName) const;
+
     std::unique_ptr<Impl> impl_;
     std::string host_;
     std::string user_;

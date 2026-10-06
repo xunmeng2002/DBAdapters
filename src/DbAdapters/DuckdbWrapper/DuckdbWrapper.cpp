@@ -691,32 +691,44 @@ struct DuckdbWrapper::Impl
 {
     duckdb_database database = nullptr;
     duckdb_connection connection = nullptr;
+    std::string dbName;
     FailureLogThrottle failureLogThrottle;
 };
 
 DuckdbWrapper::DuckdbWrapper(const std::string& dbName)
     : impl_(std::make_unique<Impl>())
 {
-    if (duckdb_open(dbName.c_str(), &impl_->database) != DuckDBSuccess)
-    {
-        WriteLog(LogLevel::Error, "DuckdbWrapper: Open database failed. Path:%s", dbName.c_str());
-        impl_->database = nullptr;
-        return;
-    }
-    if (duckdb_connect(impl_->database, &impl_->connection) != DuckDBSuccess)
-    {
-        // 连接失败后连接句柄为空，后续所有语句都会静默失效，必须显式记录
-        WriteLog(LogLevel::Error, "DuckdbWrapper: Connect failed. Path:%s", dbName.c_str());
-        impl_->connection = nullptr;
-    }
+    impl_->dbName = dbName;
+    OpenOrReportFailure();
 }
 DuckdbWrapper::~DuckdbWrapper()
 {
     DisConnect();
 }
 
+void DuckdbWrapper::OpenOrReportFailure()
+{
+    if (impl_->database == nullptr
+        && duckdb_open(impl_->dbName.c_str(), &impl_->database) != DuckDBSuccess)
+    {
+        WriteLog(LogLevel::Error, "DuckdbWrapper: Open database failed. Path:%s", impl_->dbName.c_str());
+        impl_->database = nullptr;
+        return;
+    }
+    if (impl_->connection == nullptr
+        && duckdb_connect(impl_->database, &impl_->connection) != DuckDBSuccess)
+    {
+        // 连接失败后连接句柄为空，后续所有语句都会静默失效，必须显式记录
+        WriteLog(LogLevel::Error, "DuckdbWrapper: Connect failed. Path:%s", impl_->dbName.c_str());
+        impl_->connection = nullptr;
+    }
+}
 bool DuckdbWrapper::Connect()
 {
+    if (impl_->connection == nullptr)
+    {
+        OpenOrReportFailure();
+    }
     return impl_->connection != nullptr;
 }
 void DuckdbWrapper::DisConnect()
@@ -942,6 +954,11 @@ void DuckdbWrapper::SelectWithSql(const char* sql, const TableSchema* schema, vo
 }
 std::string DuckdbWrapper::SelectWithSqlVectorized(const char* sql, const TableSchema* schema, void* recordsList, const RecordFactory& factory)
 {
+    if (impl_->connection == nullptr)
+    {
+        WriteLog(LogLevel::Error, "DuckdbWrapper: SELECT skipped, database is not open. Sql:%s", sql);
+        return "database is not open";
+    }
     duckdb_result result;
     if (duckdb_query(impl_->connection, sql, &result) != DuckDBSuccess)
     {

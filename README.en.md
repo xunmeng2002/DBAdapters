@@ -44,6 +44,16 @@ All four adapters inherit the unified `DB` interface — switching databases onl
 
 > The MySQL adapter uses the **X DevAPI** (`mysqlx://` protocol; the server must enable the X Plugin, default port 33060). The MariaDB adapter uses the classic `tcp://` protocol (default port 3306).
 
+`Connect()` is an **idempotent action** — it means "make this connection usable and report whether it
+is": it does not reopen an established connection, and it **rebuilds** one after `DisConnect()`.
+`DisConnect()` nulls the internal handle, and the two are mutually dependent. See
+[`docs/connection-lifecycle.md`](docs/connection-lifecycle.md) for the contract, the differences in
+how the four adapters report failures, and the reconnect plus full-resync design.
+
+Calling any operation after the connection has been closed **does not crash**: every entry point of
+all four adapters has a null guard, which logs one error line and skips the call (e.g.
+`MysqlWrapper: EXEC skipped, session is not open.`). The `void` interfaces report no further failure.
+
 #### Loading a backend at runtime (so a backend can be left out of a release)
 
 When all four adapters are linked, they and their client libraries enter the address space the moment the **process loads** — even if the current configuration only uses one of them. To make a backend "referenced per configuration, optionally absent from a release", load it **at runtime** by name:
@@ -73,7 +83,10 @@ The key component that flushes "in-memory database changes" to disk asynchronous
 - Inherits `Spark::Core::ThreadBase`; a background thread loops over the operation queue
 - Implements `MdbSubscriber`, wrapping the in-memory database's `OnRecordInsert / OnRecordBatchInsert / OnRecordErase / ...` events into `DbOperate` items and enqueueing them
 - Create / drop / truncate are dispatched as batch operations; inserts support transactional batches (`BatchInsert`)
-- Auto-reconnects on disconnect; failed operations are logged and retried after a short sleep
+- Auto-reconnects on disconnect; failed operations are logged and retried after a short sleep. After a
+  successful reconnect the subscriber performs a full resync to restore the in-memory tables for the
+  disconnected period (SQLite / DuckDB log write failures in place and never throw, so only
+  MySQL / MariaDB ever reach the reconnect path)
 - `DbOperate` objects are pooled to reduce memory allocation during high-frequency writes
 
 ### 2.4 Typical Scenario
@@ -110,6 +123,7 @@ DbAdapters/
 │   └── CMakeLists.txt
 ├── docs/                         # Documentation
 │   ├── backend-runtime-loading.md # Runtime backend loading (design notes, Chinese)
+│   ├── connection-lifecycle.md   # Connection contract and reconnect (design notes, Chinese)
 │   ├── environment-setup.md      # Environment setup guide (Chinese)
 │   └── environment-setup.en.md   # Environment setup guide (English)
 ├── submodules/                   # Submodule dependencies (CMakeCommon)
@@ -458,7 +472,7 @@ int main()
 }
 ```
 
-> **Record-ownership contract**: how a record is released travels with its record handle (`RecordHandle`) instead of being inferred from the operation type. The producer declares it at the handoff point: `AdoptRecord(record)` means the writer releases it from now on; `BorrowRecord(record)` means only the pointer is borrowed and the producer still releases it. `Insert` and `BatchInsert` both use the latter: the table holds the records handed in by the caller and the writer only borrows them, so batches and single inserts share exactly the same ownership semantics — and a batch no longer needs a private copy of every record. The price is that a borrowed record must not be modified or released while the writer may still be reading it: `Update` rewrites its bytes, and `Erase` / `TruncateTable` returns it to the object pool. Stop and join the writer before changing the table ahead of a pending write.
+> **Record-ownership contract**: how a record is released travels with its record handle (`RecordHandle`) instead of being inferred from the operation type. The producer declares it at the handoff point: `AdoptRecord(record)` means the writer releases it from now on; `BorrowRecord(record)` means only the pointer is borrowed and the producer still releases it. `Insert` and `BatchInsert` both use the latter: the table holds the records handed in by the caller and the writer only borrows them, so batches and single inserts share exactly the same ownership semantics — and a batch no longer needs a private copy of every record. The price is that a borrowed record must not be modified or released while the writer may still be reading it: `Update` rewrites its bytes, and `Erase` / `TruncateTable` returns it to the object pool. Stop and join the writer before changing the table ahead of a pending write. **`BatchInsert` does not check for key conflicts — that is the caller's obligation**: a batch must not contain duplicates internally, nor collide with records already in the table. When that holds, every record costs nothing extra; when it does not, **Release builds log nothing and fail nothing** — the losing record is absent from the index (so `TruncateTable` never releases it, leaking a pool slot) yet is still written to the database (memory table and database silently diverge). **Debug builds are not silent**: the `bool` returned by `PrimaryKey->Insert` and each unique key's `Insert` is passed straight to `assert`, so a broken contract aborts the process immediately (only those two index kinds are asserted; secondary indexes are `std::multiset`, where duplicate keys are legitimate). A single `Insert` does pre-check: it returns `false` and releases the record on conflict.
 
 ## 7. Integration Tests
 
@@ -474,6 +488,7 @@ The project ships the **test/TestDB** integration test program covering all four
 | `TestDuckdbVectorizedMultiChunk` | Multi-chunk fallback path: BIGINT→Char, DOUBLE→Int64 row-index correctness across chunks |
 | `TestBackendLoader` | Runtime loading: the normal per-kind entry returns a usable object for a backend that loads; a backend that fails to construct returns a readable reason instead of letting the exception cross the C boundary; a low-level per-basename entry covers "module does not exist at all", and the message must name both candidate paths. Failures are reflected in the process exit code |
 | `TestAsyncWriterRecordOwnership` | End-to-end smoke for record ownership: against a real sqlite backend with a real writer thread, a record handed over via `AdoptRecord` must actually land in the table and be released exactly once. The semantic details (borrow, move, batch, exceptions, disconnect) live in the unit tests below. Failures are reflected in the process exit code |
+| `TestReconnect` | Reconnect semantics: after `Connect → DisConnect → Connect` the test creates a table, writes a row and reads it back, asserting the row is really there (once for SQLite, once for DuckDB). The return value of `Connect` alone is not enough — after a disconnect, `Exec` failures are silent. Failures are reflected in the process exit code |
 
 ### Run the Tests
 
@@ -495,7 +510,7 @@ can be run separately.
 | Suite | Cases |
 | :--- | :--- |
 | `RecordHandle` | Move leaves the source empty; move assignment releases the old record first; vector growth does not double-release |
-| `RecordOwnership` | A borrowed record is not released; an adopted one is released exactly once; every batch element is released; a throwing execution still releases exactly once; discarding pending operations on disconnect releases exactly once |
+| `RecordOwnership` | A borrowed record is not released; an adopted one is released exactly once; every batch element is released; a throwing execution still releases exactly once; discarding pending operations on disconnect releases exactly once; the destructor drains the pending queue and releases its records; the writer thread reconnects by itself after a disconnect |
 
 ```bash
 # Windows
