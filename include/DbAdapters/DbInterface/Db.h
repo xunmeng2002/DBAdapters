@@ -1,8 +1,5 @@
 #pragma once
 #include <DbAdapters/DbInterface/Schema.h>
-#include <string>
-#include <list>
-#include <vector>
 
 
 namespace DbAdapters

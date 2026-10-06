@@ -6,10 +6,8 @@
 #include <DbAdapters/DbInterface/FailureLogThrottle.h>
 #include <DbAdapters/DbInterface/RecordHandle.h>
 #include <DbAdapters/DbInterface/SchemaRegistry.h>
-#include <Spark/TemplateLib/TemplateLib.h>
 #include <Spark/Core/Core.h>
 #include <list>
-#include <atomic>
 #include <mutex>
 #include <condition_variable>
 #include <vector>
