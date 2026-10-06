@@ -1,7 +1,7 @@
 # DbAdapters
 [![License](https://img.shields.io/badge/License-BSD--4--Clause-blue.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/Language-C++20+-orange.svg)]()
-[![Build](https://img.shields.io/badge/Build-CMake3.20+-green.svg)]()
+[![Build](https://img.shields.io/badge/Build-CMake3.25+-green.svg)]()
 
 **DbAdapters** 是一套基于 **Spark** 基础库的统一**数据库访问层**，面向金融交易 / 风控系统，提供 **SQLite、DuckDB、MySQL、MariaDB** 四种数据库的一致性读写封装。通过"**表结构描述（TableSchema）→ 类型化表（TypedTable）→ 异步写库（AsyncDbWriter）**"三层抽象，业务代码无需手写 SQL 即可完成建表、增删改查与异步落盘，天然适配"内存数据库 + 持久化数据库"的经典低时延架构。
 
@@ -21,7 +21,7 @@ Created by [Fireseeker](https://fireseeker.cn/)
 
 | 组件 | 说明 |
 | --- | --- |
-| `DB` | 抽象基类：连接管理 + 建表 / 删表 / 清表 + 单条 / 批量增删改 + 全量 / 自定义 SQL 查询 |
+| `Db` | 抽象基类：连接管理 + 建表 / 删表 / 清表 + 单条 / 批量增删改 + 全量 / 自定义 SQL 查询 |
 | `TableSchema` | 表结构描述（表名、字段描述、主键、二级索引），驱动 SQL 自动生成 |
 | `FieldDescriptor` | 字段描述：名称、类型（Int8 / UInt8 / Int16 / UInt16 / Int32 / UInt32 / Int64 / UInt64 / Double / Char / Bool 共 11 种）、在记录结构体中的偏移与数组长度 |
 | `RecordFactory` | 查询结果的记录分配与收集回调（`Allocate` / `PushBack`） |
@@ -33,7 +33,7 @@ Created by [Fireseeker](https://fireseeker.cn/)
 
 ### 2. 数据库适配器（Wrapper）
 
-四种适配器继承统一 `DB` 接口，切换数据库只需替换构造参数：
+四种适配器继承统一 `Db` 接口，切换数据库只需替换构造参数：
 
 | 适配器 | 后端 | 构造参数 | 说明 |
 | --- | --- | --- | --- |
@@ -159,7 +159,7 @@ DbAdapters/
 ### 基础要求
 
 - C++ 编译器：支持 **C++20 及以上**（GCC、Clang、MSVC）
-- 构建工具：**CMake 3.20+**（本项目 Presets 需 3.21+）
+- 构建工具：**CMake 3.25+**（`CMakeLists.txt` 的 `cmake_minimum_required` 即为 3.25）
 - 包管理：**vcpkg**（`VCPKG_ROOT` 环境变量必需，供 CMake 定位 toolchain）
 - 平台：Linux、Windows（Windows 推荐搭配 VS2022 或 WSL）
 
@@ -251,6 +251,47 @@ cmake --build out/build/WSL-GCC-Release
 # Linux（安装 Debug / Release 到 ../Libs/DbAdapters/x64-linux）
 sh Install.sh
 ```
+
+### 7. 在别的仓库消费
+
+安装之后即可用 `find_package` 直接消费，不必把 DbAdapters 的源码拉进消费方工程：
+
+```cmake
+find_package(DbAdapters CONFIG REQUIRED PATHS "../Libs/DbAdapters/x64-windows")
+
+target_link_libraries(YourTarget PRIVATE
+    DbAdapters::SqliteWrapper      # 四个适配器按需选
+    DbAdapters::AsyncDbWriter)
+```
+
+导出目标共 7 个：`DbInterface`（接口目标）、四个 Wrapper、`AsyncDbWriter`、`BackendLoaderStatic`。
+
+**消费方必须自己准备 Spark**。`DbAdaptersConfig.cmake` 的第一条就是 `find_dependency(Spark CONFIG)`，
+故配置期 `Spark` 必须能被找到（`Spark_DIR` 或 `CMAKE_PREFIX_PATH`）；并且除四个 Wrapper 之外的
+公开头都直接 include Spark：`AsyncDbWriter.h` 拉 `<Spark/Core/Core.h>` 与 `<Spark/TemplateLib/TemplateLib.h>`，
+`DbOperate.h` 与 `DbBackendLoader.h` 拉 `<Spark/Types.h>`，`FailureLogThrottle.h` 拉
+`<Spark/Core/Logger/Logger.h>`。而导出集里 Spark 只以 `$<LINK_ONLY:Spark::Core>` 挂在
+`BackendLoaderStatic` 上——该项只影响链接行，**不传播 include 目录**。因此用了上述任何一个头，
+消费方都得自己再接一次：
+
+```cmake
+find_package(Spark CONFIG REQUIRED PATHS "../Libs/Spark/x64-windows")
+target_link_libraries(YourTarget PRIVATE Spark::Core)
+```
+
+只用四个 Wrapper 头与 `TypedTable.h` / `Schema.h` / `SchemaRegistry.h` 的消费方不需要这一步：
+这些头只 include 各自的 Export 头与 `Db.h`，链条上不出现 Spark。
+
+> **注意**：`DbAdaptersConfig.cmake` 还会 `find_dependency` vcpkg 提供的
+> `unofficial-sqlite3`、`unofficial-mysql-connector-cpp`、`unofficial-mariadb-connector-cpp`、
+> `ZLIB`、`OpenSSL`。它们不在安装树里，消费方的配置期得让 vcpkg 能看见一棵已安装树
+> （`-DVCPKG_INSTALLED_DIR=<DbAdapters 的 vcpkg_installed>`，或消费方自己的 `vcpkg.json`
+> manifest），否则 `find_package(DbAdapters)` 会停在 `unofficial-sqlite3` 上。
+
+> **提示**：Windows 运行时需要三棵安装树的 `bin` 同时可见（`PATH` 或拷到可执行文件旁）：
+> DbAdapters 的 `bin`（`SqliteWrapper.dll` 等）、Spark 的 `bin`（`Core.dll`）、
+> vcpkg 的 `bin`（`sqlite3.dll` 等第三方 DLL）。实测 applocal 不会为这几个 IMPORTED 目标拷任何
+> DLL——消费方构建产物目录里是空的——缺哪一个都以"找不到 `SqliteWrapper.dll`"的形式报出来。
 
 ## 六、基础使用示例
 
@@ -509,7 +550,7 @@ int main()
 | `TestSqliteNarrowSaturation` | 读侧收窄饱和：宽列塞入超范围值，期望 6 格各自饱和并汇总一条 Warning |
 | `TestDuckdbNarrowInteger` | 同 SQLite 那条，另覆盖 DuckDB 专有的向量化 chunk 读取路径 |
 | `TestDuckdbNarrowSaturation` | 读侧收窄饱和（DuckDB，走向量化读取路径） |
-| `TestDuckdbNarrowColumnTypes` | DuckDB 窄列类型映射：各整数列宽与 NULL 哨兵 |
+| `TestDuckdbNarrowColumnTypes` | DuckDB 窄列类型映射：`typeof` 断言各窄整数在库内的物理类型名（`TINYINT` / `UTINYINT` / `SMALLINT` / `USMALLINT` / `UINTEGER` / `UBIGINT` / `INTEGER`），不读值 |
 | `TestFailureVisibility` | 失败可见性：刻意打在不存在的库/表上，断言日志出现对应 ERROR 行（该段 ERROR 属预期输出） |
 | `TestBackendLoader` | 运行时装载：按种类的常路入口装载成功的后端返回可用对象；构造失败的后端返回可读原因而非让异常穿过 C 边界；另有一条按基名的低层入口覆盖"模块根本不存在"，文案须含两条候选路径。失败会反映到进程退出码 |
 | `TestAsyncWriterRecordOwnership` | 记录归属的端到端烟雾：真 sqlite + 真写线程，`AdoptRecord` 移交一条记录后断言行确实落库、且归还恰好一次。语义细节（借用、移动、批、异常、断开）见下节单元测试。失败会反映到进程退出码 |

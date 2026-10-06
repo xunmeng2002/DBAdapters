@@ -1,7 +1,7 @@
 # DbAdapters
 [![License](https://img.shields.io/badge/License-BSD--4--Clause-blue.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/Language-C++20+-orange.svg)]()
-[![Build](https://img.shields.io/badge/Build-CMake3.20+-green.svg)]()
+[![Build](https://img.shields.io/badge/Build-CMake3.25+-green.svg)]()
 
 **DbAdapters** is a unified **database access layer** built on top of the **Spark** foundational library. Designed for financial trading and risk-management systems, it provides consistent read/write encapsulation for four databases: **SQLite, DuckDB, MySQL, and MariaDB**. Through a three-layer abstraction — **table schema description (`TableSchema`) → typed table (`TypedTable`) → async writer (`AsyncDbWriter`)** — business code can create tables, perform CRUD, and persist asynchronously without writing SQL by hand, fitting naturally into the classic low-latency "in-memory database + persistent database" architecture.
 
@@ -21,9 +21,9 @@ It does not depend on any concrete database and only defines the description and
 
 | Component | Description |
 | --- | --- |
-| `DB` | Abstract base class: connection management + create / drop / truncate tables + single / batch CRUD + full / custom-SQL queries |
+| `Db` | Abstract base class: connection management + create / drop / truncate tables + single / batch CRUD + full / custom-SQL queries |
 | `TableSchema` | Table schema description (table name, field descriptors, primary key, secondary indexes) that drives automatic SQL generation |
-| `FieldDescriptor` | Field description: name, type (Int / Int64 / Double / Char / Bool), offset within the record struct, and array size |
+| `FieldDescriptor` | Field description: name, type (Int8 / UInt8 / Int16 / UInt16 / Int32 / UInt32 / Int64 / UInt64 / Double / Char / Bool — 11 in total), offset within the record struct, and array size |
 | `RecordFactory` | Record allocation and collection callbacks for query results (`Allocate` / `PushBack`) |
 | `IndexDefinition` | Secondary index definition (index ID + field set), used for delete-by-index |
 | `SchemaRegistry` | Registry mapping table ID → `TableSchema`, used by `AsyncDbWriter` to look up schemas |
@@ -33,7 +33,7 @@ It does not depend on any concrete database and only defines the description and
 
 ### 2.2 Database Adapters (Wrappers)
 
-All four adapters inherit the unified `DB` interface — switching databases only requires changing the constructor arguments:
+All four adapters inherit the unified `Db` interface — switching databases only requires changing the constructor arguments:
 
 | Adapter | Backend | Constructor | Notes |
 | --- | --- | --- | --- |
@@ -152,7 +152,7 @@ DbAdapters/
 ### Prerequisites
 
 - C++ compiler supporting **C++20 or later** (GCC, Clang, MSVC)
-- Build tool: **CMake 3.20+** (this project's presets require 3.21+)
+- Build tool: **CMake 3.25+** (`cmake_minimum_required` in `CMakeLists.txt` is 3.25)
 - Package manager: **vcpkg** (`VCPKG_ROOT` environment variable required; CMake uses it to locate the toolchain)
 - Platform: Linux, Windows (VS2022 or WSL recommended on Windows)
 
@@ -222,7 +222,7 @@ cmake --build out/build/WSL-GCC-Release
 `BUILD_TESTS` **defaults to `ON`**, so the two commands above also build `test/` (`TestDB` and
 `UnitTests`); configure therefore runs `find_package(doctest CONFIG REQUIRED PATHS "../Libs/doctest")`,
 and that directory must be in place first (see
-[`docs/environment-setup.md`](docs/environment-setup.md) §1.7). A library-only consumer that does not
+[`docs/environment-setup.en.md`](docs/environment-setup.en.md) §1.7). A library-only consumer that does not
 want to provide doctest can pass `-DBUILD_TESTS=OFF` to skip `test/`; the `find_package` above then
 does not run.
 
@@ -246,6 +246,54 @@ The test program runs the same CRUD flow against SQLite / DuckDB / MySQL / Maria
 # Linux (installs Debug / Release into ../Libs/DbAdapters/x64-linux)
 sh Install.sh
 ```
+
+### 5.7 Consuming from Another Repository
+
+Once installed, the library can be consumed with `find_package` — there is no need to pull the
+DbAdapters sources into the consuming project:
+
+```cmake
+find_package(DbAdapters CONFIG REQUIRED PATHS "../Libs/DbAdapters/x64-windows")
+
+target_link_libraries(YourTarget PRIVATE
+    DbAdapters::SqliteWrapper      # pick the adapters you need
+    DbAdapters::AsyncDbWriter)
+```
+
+Seven targets are exported: `DbInterface` (the interface target), the four wrappers,
+`AsyncDbWriter`, and `BackendLoaderStatic`.
+
+**The consumer must provide Spark itself.** The very first line of `DbAdaptersConfig.cmake` is
+`find_dependency(Spark CONFIG)`, so `Spark` has to be locatable at configure time (`Spark_DIR` or
+`CMAKE_PREFIX_PATH`). On top of that, every public header except the four wrappers includes Spark
+directly: `AsyncDbWriter.h` pulls `<Spark/Core/Core.h>` and `<Spark/TemplateLib/TemplateLib.h>`,
+`DbOperate.h` and `DbBackendLoader.h` pull `<Spark/Types.h>`, and `FailureLogThrottle.h` pulls
+`<Spark/Core/Logger/Logger.h>`. In the export set Spark appears only as
+`$<LINK_ONLY:Spark::Core>` on `BackendLoaderStatic` — that governs the link line and **does not
+propagate include directories**. So a consumer using any of those headers has to wire it up once:
+
+```cmake
+find_package(Spark CONFIG REQUIRED PATHS "../Libs/Spark/x64-windows")
+target_link_libraries(YourTarget PRIVATE Spark::Core)
+```
+
+A consumer that only uses the four wrapper headers plus `TypedTable.h` / `Schema.h` /
+`SchemaRegistry.h` does not need that step: those headers include nothing but their own export
+header and `Db.h`, and Spark never appears in the chain.
+
+> **Note**: `DbAdaptersConfig.cmake` also runs `find_dependency` for the vcpkg-provided
+> `unofficial-sqlite3`, `unofficial-mysql-connector-cpp`, `unofficial-mariadb-connector-cpp`,
+> `ZLIB` and `OpenSSL`. Those are not part of the install tree, so the consumer's configure step
+> must expose an installed tree to vcpkg (`-DVCPKG_INSTALLED_DIR=<DbAdapters' vcpkg_installed>`,
+> or a `vcpkg.json` manifest of its own); otherwise `find_package(DbAdapters)` stops at
+> `unofficial-sqlite3`.
+
+> **Tip**: at runtime on Windows the `bin` directories of all three install trees must be visible
+> (`PATH`, or copy the DLLs next to the executable): DbAdapters' `bin` (`SqliteWrapper.dll` and
+> friends), Spark's `bin` (`Core.dll`), and vcpkg's `bin` (`sqlite3.dll` and other third-party
+> DLLs). Measured behaviour: applocal copies nothing for these IMPORTED targets — the consumer's
+> build directory ends up empty — and any missing one surfaces as "cannot open shared object file:
+> `SqliteWrapper.dll`".
 
 ## 6. Basic Usage Examples
 
@@ -504,7 +552,7 @@ The project ships the **test/TestDB** integration test program covering all four
 | `TestSqliteNarrowSaturation` | Read-side narrowing saturation: out-of-range values in wide columns must saturate cell by cell and roll up into a single Warning |
 | `TestDuckdbNarrowInteger` | Same as the SQLite case, plus DuckDB's vectorized chunk read path |
 | `TestDuckdbNarrowSaturation` | Read-side narrowing saturation (DuckDB, through the vectorized path) |
-| `TestDuckdbNarrowColumnTypes` | DuckDB narrow column-type mapping: each integer width and the NULL sentinel |
+| `TestDuckdbNarrowColumnTypes` | DuckDB narrow column-type mapping: `typeof` asserts the physical type name each narrow integer gets in the database (`TINYINT` / `UTINYINT` / `SMALLINT` / `USMALLINT` / `UINTEGER` / `UBIGINT` / `INTEGER`); no values are read |
 | `TestFailureVisibility` | Failure visibility: operations are deliberately aimed at a missing database / table and the log is asserted to carry the matching ERROR lines (those ERRORs are expected output) |
 | `TestBackendLoader` | Runtime loading: the normal per-kind entry returns a usable object for a backend that loads; a backend that fails to construct returns a readable reason instead of letting the exception cross the C boundary; a low-level per-basename entry covers "module does not exist at all", and the message must name both candidate paths. Failures are reflected in the process exit code |
 | `TestAsyncWriterRecordOwnership` | End-to-end smoke for record ownership: against a real sqlite backend with a real writer thread, a record handed over via `AdoptRecord` must actually land in the table and be released exactly once. The semantic details (borrow, move, batch, exceptions, disconnect) live in the unit tests below. Failures are reflected in the process exit code |

@@ -224,7 +224,7 @@ void SetBatchRecords(std::vector<RecordHandle> records);                  // 故
 | `include/DbAdapters/DbInterface/MdbSubscriber.h` | 5 个记录类回调签名（§4.3） |
 | `include/DbAdapters/DbInterface/Schema.h:55` | 删 `DeallocateRecord` 字段（后续字段同步前移） |
 | `include/DbAdapters/AsyncDbWriter/AsyncDbWriter.h` | 5 个 override 签名同步；删私有 `AllocateDbOperate()`，加私有 `EnqueueDbOperate(...)` |
-| `src/DbAdapters/AsyncDbWriter/AsyncDbWriter.cpp` | releaser 瘦身；8 个回调收敛到私有助手 `CreateDbOperate` / `EnqueueDbOperate`（见下）；`ExecuteDbOperate` 各分支 `.Get()`；`BatchInsertRecords` |
+| `src/DbAdapters/AsyncDbWriter/AsyncDbWriter.cpp` | releaser 瘦身；7 个回调收敛到私有助手 `CreateDbOperate` / `EnqueueDbOperate`（见下）；`ExecuteDbOperate` 各分支 `.Get()`；`BatchInsertRecords` |
 | `src/DbAdapters/AsyncDbWriter/DbOperateImpl.h/.cpp` | 成员改 `std::vector<RecordHandle>`；删 `DeallocateRecord()` |
 | `test/TestDB/MdbStructs.cpp` | 11 处 `TableSchema` 初始化去掉 `DeallocateXxx` 实参；11 个 `DeallocateXxx` 静态函数删除 |
 | `test/TestDB/TestDB.cpp` | 4 处手写 `TableSchema` 同步去参；新增 §8 的归属回归（探针记录 / `RecordingDb` 替身）；复裁后整块迁往 `test/UnitTests`，本文件改留一条真后端用例 |
@@ -237,8 +237,8 @@ void SetBatchRecords(std::vector<RecordHandle> records);                  // 故
 > `include/` 目录整体安装（`CMakeLists.txt:123`），新头随包发布。
 
 **`CreateDbOperate` / `EnqueueDbOperate`（批后复查补记，2026-10-05）**：`OnTableOp` 与 6 个 `OnRecord*` 原本各自 5 行——
-`DbOperate::Allocate()` → 逐字段赋值 → `AddDbOperate()`——共 8 段近乎复制粘贴（含 `OnRecordBatchInsert`），违反 Harness §5。
-现分出「建好但不入队」与「建好并入队」两层，8 处共用同一个建对象入口：
+`DbOperate::Allocate()` → 逐字段赋值 → `AddDbOperate()`——共 7 段近乎复制粘贴（含 `OnRecordBatchInsert`），违反 Harness §5。
+现分出「建好但不入队」与「建好并入队」两层，7 处共用同一个建对象入口：
 
 ```cpp
 DbOperate* AsyncDbWriter::CreateDbOperate(DbOperateType operate, unsigned int tableId, RecordHandle record, unsigned int indexId)
@@ -258,7 +258,7 @@ void AsyncDbWriter::EnqueueDbOperate(DbOperateType operate, unsigned int tableId
 ```
 
 两层是必要的：批路径必须**先设批记录再入队**（否则写线程会先弹出尚未设好批数据的操作），
-故它用 `CreateDbOperate(...)` → `SetBatchRecords(...)` → `AddDbOperate(...)` 三步；其余 7 个回调各缩成一行 `EnqueueDbOperate(...)`。
+故它用 `CreateDbOperate(...)` → `SetBatchRecords(...)` → `AddDbOperate(...)` 三步；其余 6 个回调各缩成一行 `EnqueueDbOperate(...)`。
 声明处两个函数的后两个参数都有默认值（`RecordHandle record = RecordHandle(), unsigned int indexId = 0`），
 故 `OnTableOp(op)` 写成 `EnqueueDbOperate(op, 0)`、`OnRecordTruncate(tableID)` 写成 `EnqueueDbOperate(DbOperateType::Truncate, tableID)`。
 **等价性**：`ObjectPool::Allocate()` 走 `new (obj) T()` 值初始化，`Operate`/`TableId`/`IndexId` 归零、
