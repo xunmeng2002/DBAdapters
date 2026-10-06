@@ -47,6 +47,11 @@ add_shared_module(MariadbWrapper		${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CU
 add_shared_module(DuckdbWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/DuckdbWrapper)
 add_shared_module(SqliteWrapper			${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/SqliteWrapper)
 
+target_include_directories(MysqlWrapper		PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/Common)
+target_include_directories(MariadbWrapper	PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/Common)
+target_include_directories(DuckdbWrapper	PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/Common)
+target_include_directories(SqliteWrapper	PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/Common)
+
 add_static_md_module(BackendLoader		${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/DbAdapters/BackendLoader)
 
 if(WIN32)

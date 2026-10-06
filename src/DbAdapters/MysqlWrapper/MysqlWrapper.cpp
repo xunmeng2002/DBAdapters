@@ -1,6 +1,7 @@
 #include <DbAdapters/MysqlWrapper/MysqlWrapper.h>
 
 #include <DbAdapters/DbInterface/DbBackendFactory.h>
+#include "FieldTypeIntegerWrite.h"
 
 #include <Spark/Core/Logger/Logger.h>
 

@@ -1,6 +1,7 @@
 #include <DbAdapters/MariadbWrapper/MariadbWrapper.h>
 
 #include <DbAdapters/DbInterface/DbBackendFactory.h>
+#include "FieldTypeIntegerWrite.h"
 
 #include <Spark/Core/Logger/Logger.h>
 

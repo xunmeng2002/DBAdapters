@@ -2,6 +2,7 @@
 
 #include <DbAdapters/DbInterface/DbBackendFactory.h>
 #include <DbAdapters/DbInterface/FailureLogThrottle.h>
+#include "FieldTypeIntegerWrite.h"
 
 #include <Spark/Core/Logger/Logger.h>
 
