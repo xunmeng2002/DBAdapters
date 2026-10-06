@@ -152,6 +152,7 @@ write_basic_package_version_file(
 # 消费方的 find_package(DbAdapters) 因此会遇到 OpenSSL::SSL 这个名字.
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
     "include(CMakeFindDependencyMacro)\n"
+    "find_dependency(Spark CONFIG)\n"
     "find_dependency(unofficial-sqlite3 CONFIG)\n"
     "find_dependency(unofficial-mysql-connector-cpp CONFIG)\n"
     "find_dependency(unofficial-mariadb-connector-cpp CONFIG)\n"
