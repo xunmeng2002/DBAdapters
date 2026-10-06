@@ -268,11 +268,10 @@ target_link_libraries(YourTarget PRIVATE
 
 **消费方必须自己准备 Spark**。`DbAdaptersConfig.cmake` 的第一条就是 `find_dependency(Spark CONFIG)`，
 故配置期 `Spark` 必须能被找到（`Spark_DIR` 或 `CMAKE_PREFIX_PATH`）；此外下列公开头还直接 include Spark：
-`AsyncDbWriter.h` 拉 `<Spark/Core/Core.h>` 与 `<Spark/TemplateLib/TemplateLib.h>`，
-`DbBackendLoader.h` 与 `MdbSubscriber.h` 拉 `<Spark/Types.h>`，`FailureLogThrottle.h` 拉
-`<Spark/Core/Logger/Logger.h>`。而导出集里 Spark 只以 `$<LINK_ONLY:Spark::Core>` 挂在
-`BackendLoaderStatic` 上——该项只影响链接行，**不传播 include 目录**。因此用了上述任何一个头，
-消费方都得自己再接一次：
+`AsyncDbWriter.h` 拉 `<Spark/Core/Core.h>`，`DbBackendLoader.h` 与 `MdbSubscriber.h` 拉
+`<Spark/Types.h>`，`FailureLogThrottle.h` 拉 `<Spark/Core/Logger/Logger.h>`。而导出集里 Spark 只以
+`$<LINK_ONLY:Spark::Core>` 挂在 `BackendLoaderStatic` 上——该项只影响链接行，**不传播 include 目录**。
+因此用了上述任何一个头，消费方都得自己再接一次：
 
 ```cmake
 find_package(Spark CONFIG REQUIRED PATHS "../Libs/Spark/x64-windows")
